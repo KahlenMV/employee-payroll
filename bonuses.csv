@@ -1,0 +1,101 @@
+id,employee_id,amount,bonus_type,effective_date,status,notes
+1,1,1095.83,PERFORMANCE,1/13/2024,PENDING,High client satisfaction rating
+2,14,2886.38,TENURE,5/11/2024,PENDING,Exceeded Q3 performance targets
+3,6,3513.47,ATTENDANCE,5/26/2024,PENDING,Exceptional initiative in project X
+4,38,4538.44,TENURE,12/7/2024,APPROVED,Leadership award for engineering pod
+5,45,3477.73,ATTENDANCE,10/13/2024,APPROVED,Perfect attendance for the quarter
+6,42,2327.48,PERFORMANCE,12/27/2024,PAID,5 years of dedicated service
+7,1,3149.24,THIRTEENTH_MONTH,2/14/2024,PENDING,Exceeded Q3 performance targets
+8,15,4112.11,ATTENDANCE,9/10/2024,PENDING,Perfect attendance for the quarter
+9,26,3495.26,PERFORMANCE,3/22/2024,PAID,Perfect attendance for the quarter
+10,41,4363.93,TENURE,2/6/2024,APPROVED,Special contribution to team building
+11,42,3934.09,PERFORMANCE,2/1/2024,PAID,High client satisfaction rating
+12,26,1733.34,ATTENDANCE,3/6/2024,APPROVED,Perfect attendance for the quarter
+13,31,828.49,PERFORMANCE,8/21/2024,PENDING,Exceeded Q3 performance targets
+14,4,1164.64,ATTENDANCE,2/20/2024,PAID,Exceeded Q3 performance targets
+15,30,3601.80,TENURE,7/22/2024,PAID,Special contribution to team building
+16,38,3109.13,PERFORMANCE,7/20/2024,APPROVED,Special contribution to team building
+17,31,5328.20,PERFORMANCE,1/2/2024,APPROVED,Exceptional initiative in project X
+18,9,3780.84,TENURE,10/12/2024,PENDING,Perfect attendance for the quarter
+19,43,2868.04,TENURE,11/13/2024,PAID,Perfect attendance for the quarter
+20,44,3925.59,ATTENDANCE,9/10/2024,PAID,Standard annual 13th month pay
+21,21,4933.71,ATTENDANCE,3/21/2024,PENDING,Leadership award for engineering pod
+22,18,4577.65,ATTENDANCE,1/10/2024,APPROVED,Special contribution to team building
+23,2,4207.56,TENURE,7/4/2024,PAID,Yearly bonus for overall achievement
+24,5,1545.04,PERFORMANCE,3/27/2024,PENDING,Yearly bonus for overall achievement
+25,39,5140.36,THIRTEENTH_MONTH,6/28/2024,PAID,Leadership award for engineering pod
+26,17,1090.65,THIRTEENTH_MONTH,11/27/2024,APPROVED,Exceeded Q3 performance targets
+27,22,4055.60,TENURE,8/7/2024,PAID,Standard annual 13th month pay
+28,35,772.44,THIRTEENTH_MONTH,4/7/2024,PAID,Yearly bonus for overall achievement
+29,33,1629.54,PERFORMANCE,4/15/2024,PAID,Yearly bonus for overall achievement
+30,15,2529.74,THIRTEENTH_MONTH,8/14/2024,PAID,Exceptional initiative in project X
+31,33,2482.19,PERFORMANCE,1/9/2024,PENDING,Perfect attendance for the quarter
+32,48,1762.16,PERFORMANCE,5/18/2024,APPROVED,High client satisfaction rating
+33,7,4077.60,ATTENDANCE,5/22/2024,PENDING,Leadership award for engineering pod
+34,12,4004.76,PERFORMANCE,3/15/2024,APPROVED,Leadership award for engineering pod
+35,37,1926.18,ATTENDANCE,3/26/2024,APPROVED,Yearly bonus for overall achievement
+36,23,979.70,TENURE,10/3/2024,PENDING,Leadership award for engineering pod
+37,9,2226.97,THIRTEENTH_MONTH,1/24/2024,PENDING,5 years of dedicated service
+38,46,2631.60,TENURE,3/7/2024,PAID,Exceeded Q3 performance targets
+39,21,3391.48,ATTENDANCE,6/20/2024,PENDING,Perfect attendance for the quarter
+40,39,4026.56,THIRTEENTH_MONTH,2/4/2024,PENDING,Consistency in delivery and quality
+41,38,3004.57,THIRTEENTH_MONTH,4/16/2024,APPROVED,Exceptional initiative in project X
+42,29,3246.16,PERFORMANCE,9/24/2024,PAID,5 years of dedicated service
+43,13,2936.04,PERFORMANCE,1/9/2024,PAID,High client satisfaction rating
+44,44,2350.25,TENURE,3/7/2024,PAID,Perfect attendance for the quarter
+45,29,5291.07,ATTENDANCE,3/21/2024,APPROVED,Perfect attendance for the quarter
+46,16,2812.32,TENURE,11/6/2024,PAID,Standard annual 13th month pay
+47,22,3131.50,PERFORMANCE,4/22/2024,APPROVED,Yearly bonus for overall achievement
+48,33,4359.16,PERFORMANCE,6/21/2024,PENDING,Leadership award for engineering pod
+49,8,1714.42,THIRTEENTH_MONTH,3/18/2024,APPROVED,5 years of dedicated service
+50,42,4075.07,ATTENDANCE,8/20/2024,PAID,Standard annual 13th month pay
+51,18,5452.43,THIRTEENTH_MONTH,10/1/2024,APPROVED,High client satisfaction rating
+52,21,1169.77,PERFORMANCE,11/16/2024,PENDING,High client satisfaction rating
+53,38,4848.51,THIRTEENTH_MONTH,10/22/2024,PAID,Leadership award for engineering pod
+54,50,3050.82,TENURE,7/28/2024,PENDING,Consistency in delivery and quality
+55,39,4742.14,PERFORMANCE,8/21/2024,APPROVED,5 years of dedicated service
+56,4,863.73,ATTENDANCE,7/16/2024,PENDING,Exceeded Q3 performance targets
+57,34,889.03,THIRTEENTH_MONTH,3/5/2024,PAID,Consistency in delivery and quality
+58,44,4451.12,ATTENDANCE,3/3/2024,APPROVED,Leadership award for engineering pod
+59,33,4526.68,ATTENDANCE,1/11/2024,PENDING,High client satisfaction rating
+60,39,1051.96,THIRTEENTH_MONTH,9/21/2024,PAID,Leadership award for engineering pod
+61,33,2168.19,ATTENDANCE,12/25/2024,PENDING,Standard annual 13th month pay
+62,39,799.73,ATTENDANCE,6/21/2024,APPROVED,Exceeded Q3 performance targets
+63,4,2890.60,PERFORMANCE,7/11/2024,PENDING,Perfect attendance for the quarter
+64,47,5434.06,PERFORMANCE,3/18/2024,PAID,Leadership award for engineering pod
+65,26,1842.87,PERFORMANCE,5/9/2024,PAID,Leadership award for engineering pod
+66,4,4604.99,PERFORMANCE,3/1/2024,PENDING,Special contribution to team building
+67,23,5068.58,PERFORMANCE,7/28/2024,PENDING,High client satisfaction rating
+68,45,2384.63,PERFORMANCE,4/20/2024,APPROVED,Exceeded Q3 performance targets
+69,29,2970.20,PERFORMANCE,9/8/2024,APPROVED,Leadership award for engineering pod
+70,23,4979.21,TENURE,6/5/2024,PAID,Consistency in delivery and quality
+71,28,4109.00,TENURE,3/17/2024,PENDING,Yearly bonus for overall achievement
+72,15,3988.83,PERFORMANCE,8/5/2024,APPROVED,Exceeded Q3 performance targets
+73,40,4928.98,ATTENDANCE,12/8/2024,APPROVED,Special contribution to team building
+74,33,2059.99,ATTENDANCE,11/19/2024,PENDING,Consistency in delivery and quality
+75,26,650.39,PERFORMANCE,2/26/2024,APPROVED,High client satisfaction rating
+76,41,931.84,ATTENDANCE,9/26/2024,APPROVED,Exceeded Q3 performance targets
+77,21,5409.23,PERFORMANCE,8/1/2024,PENDING,High client satisfaction rating
+78,5,4917.23,TENURE,11/17/2024,PAID,Leadership award for engineering pod
+79,5,5394.34,TENURE,8/17/2024,PENDING,Consistency in delivery and quality
+80,10,5203.80,ATTENDANCE,3/17/2024,PAID,Perfect attendance for the quarter
+81,10,2198.77,ATTENDANCE,9/23/2024,APPROVED,Leadership award for engineering pod
+82,3,1424.62,TENURE,7/15/2024,PAID,Yearly bonus for overall achievement
+83,45,5267.05,ATTENDANCE,4/21/2024,PAID,Leadership award for engineering pod
+84,15,2069.80,PERFORMANCE,3/1/2024,APPROVED,Special contribution to team building
+85,6,1204.29,THIRTEENTH_MONTH,7/10/2024,PENDING,High client satisfaction rating
+86,22,3991.41,PERFORMANCE,4/28/2024,PENDING,High client satisfaction rating
+87,16,2488.70,PERFORMANCE,1/18/2024,APPROVED,Standard annual 13th month pay
+88,1,4455.45,THIRTEENTH_MONTH,11/7/2024,APPROVED,Exceeded Q3 performance targets
+89,1,632.23,PERFORMANCE,7/8/2024,APPROVED,Leadership award for engineering pod
+90,49,1876.66,PERFORMANCE,12/4/2024,PENDING,Consistency in delivery and quality
+91,8,4082.44,PERFORMANCE,8/22/2024,PENDING,Consistency in delivery and quality
+92,10,1920.05,PERFORMANCE,5/27/2024,PAID,Consistency in delivery and quality
+93,46,4066.47,TENURE,8/12/2024,PAID,Exceeded Q3 performance targets
+94,37,2998.64,TENURE,10/15/2024,APPROVED,Special contribution to team building
+95,3,3356.43,THIRTEENTH_MONTH,3/4/2024,PAID,Perfect attendance for the quarter
+96,24,1251.70,PERFORMANCE,11/26/2024,PAID,Yearly bonus for overall achievement
+97,21,5089.35,ATTENDANCE,9/18/2024,APPROVED,Standard annual 13th month pay
+98,50,1569.00,THIRTEENTH_MONTH,8/11/2024,PENDING,Exceeded Q3 performance targets
+99,5,3364.61,TENURE,3/8/2024,PENDING,Special contribution to team building
+100,28,1787.39,PERFORMANCE,7/1/2024,PENDING,Consistency in delivery and quality
