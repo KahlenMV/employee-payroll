@@ -13,9 +13,9 @@ async function main() {
     console.log('Seeding database...');
 
     // Paths to CSV files (relative to prisma directory)
-    const employeesPath = path.resolve(__dirname, '../../employees.csv');
-    const leaveRequestsPath = path.resolve(__dirname, '../../leave_requests.csv');
-    const bonusesPath = path.resolve(__dirname, '../../bonuses.csv');
+    const employeesPath = path.resolve(__dirname, './data/employees.csv');
+    const leaveRequestsPath = path.resolve(__dirname, './data/leave_requests.csv');
+    const bonusesPath = path.resolve(__dirname, './data/bonuses.csv');
 
     // 1. Seed Employees
     console.log('Reading employees.csv...');
