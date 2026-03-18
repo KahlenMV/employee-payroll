@@ -32,15 +32,15 @@ function downloadCSV(filename: string, rows: string[][]): void {
 /** Returns the next EMP-prefixed ID given the existing list. */
 export function generateEmployeeId(employees: Employee[]): string {
   const maxNum = employees.reduce((max, e) => {
-    const n = parseInt(e.employeeId.replace(/\D/g, ''), 10);
+    const n = parseInt(e.employee_id.replace(/\D/g, ''), 10);
     return isNaN(n) ? max : Math.max(max, n);
   }, 0);
   return `EMP${String(maxNum + 1).padStart(3, '0')}`;
 }
 
 /** Derive hourly rate from monthly basic pay (22 working days × 8 hrs). */
-export function calcHourlyRate(basicPay: number): number {
-  return parseFloat((basicPay / 176).toFixed(4)); // 22d × 8h = 176h
+export function calcHourlyRate(basic_pay: number): number {
+  return parseFloat((basic_pay / 176).toFixed(4)); // 22d × 8h = 176h
 }
 
 // ─── Feature 2 – Export Attendance & Leave (filtered by year) ─────────────────
@@ -58,15 +58,15 @@ export function exportAttendanceAndLeave(
   const attRows: string[][] = [
     ['Type', 'Employee ID', 'Employee Name', 'Date', 'Time In', 'Time Out', 'Hours Worked', 'Overtime', 'Status'],
     ...attFiltered.map(a => {
-      const emp = employees.find(e => e.id === a.employeeId);
+      const emp = employees.find(e => e.id === a.employee_id);
       return [
         'Attendance',
-        emp?.employeeId ?? '',
+        emp?.employee_id ?? '',
         emp?.name ?? '',
         a.date,
-        a.timeIn || '-',
-        a.timeOut || '-',
-        a.hoursWorked.toFixed(2),
+        a.time_in || '-',
+        a.time_out || '-',
+        a.hours_worked.toFixed(2),
         a.overtime.toFixed(2),
         a.status,
       ];
@@ -74,14 +74,14 @@ export function exportAttendanceAndLeave(
   ];
 
   // Leave rows
-  const leaveFiltered = leaveRequests.filter(l => l.startDate.startsWith(yearStr));
+  const leaveFiltered = leaveRequests.filter(l => l.start_date.startsWith(yearStr));
   const leaveRows: string[][] = leaveFiltered.map(l => {
-    const emp = employees.find(e => e.id === l.employeeId);
+    const emp = employees.find(e => e.id === l.employee_id);
     return [
       'Leave',
-      emp?.employeeId ?? '',
-      l.employeeName,
-      l.startDate,
+      emp?.employee_id ?? '',
+      l.employee_name ?? '',
+      l.start_date,
       '-',
       '-',
       String(l.days),
@@ -132,7 +132,7 @@ export function processPayroll(opts: ProcessPayrollOptions, existingRecords: Pay
   const { employees, attendance, period, periodType, periodStart, periodEnd } = opts;
 
   // Check for existing records in same period to prevent duplication
-  const isDuplicate = existingRecords.some(r => r.period === period);
+  const isDuplicate = existingRecords.some(r => r.period_label === period);
   if (isDuplicate) {
     throw new Error(`Payroll for ${period} has already been processed.`);
   }
@@ -141,37 +141,37 @@ export function processPayroll(opts: ProcessPayrollOptions, existingRecords: Pay
   const generatedDate = new Date().toISOString().split('T')[0];
 
   return employees.map((emp, idx) => {
-    const empAtt = periodAtt.filter(a => a.employeeId === emp.id);
+    const empAtt = periodAtt.filter(a => a.employee_id === emp.id);
     const totalOT = empAtt.reduce((s, a) => s + a.overtime, 0);
-    const overtimePay = parseFloat((totalOT * emp.hourlyRate * 1.25).toFixed(2));
-    const holidayPay = 0; // holidays would come from a holiday config
+    const overtime_pay = parseFloat((totalOT * emp.hourly_rate * 1.25).toFixed(2));
+    const holiday_pay = 0; // holidays would come from a holiday config
     const bonuses = 0;
-    const grossPay = parseFloat((emp.basicPay + overtimePay + holidayPay + bonuses).toFixed(2));
-    const { sss, philHealth, pagIbig, tax } = calcDeductions(grossPay);
-    const totalDeductions = parseFloat((sss + philHealth + pagIbig + tax).toFixed(2));
-    const netPay = parseFloat((grossPay - totalDeductions).toFixed(2));
+    const gross_pay = parseFloat((emp.basic_pay + overtime_pay + holiday_pay + bonuses).toFixed(2));
+    const { sss, philHealth, pagIbig, tax } = calcDeductions(gross_pay);
+    const total_deductions = parseFloat((sss + philHealth + pagIbig + tax).toFixed(2));
+    const net_pay = parseFloat((gross_pay - total_deductions).toFixed(2));
 
     return {
       id: `pay-${emp.id}-${periodStart}`,
-      employeeId: emp.id,
-      employeeName: emp.name,
-      period,
-      periodType,
-      basicPay: emp.basicPay,
-      overtimePay,
-      holidayPay,
+      employee_id: emp.id,
+      employee_name: emp.name,
+      period_label: period,
+      period_type: periodType,
+      basic_pay: emp.basic_pay,
+      overtime_pay,
+      holiday_pay,
       bonuses,
-      grossPay,
+      gross_pay,
       deductions: [
         { id: `d-tax-${idx}`, name: 'Withholding Tax', amount: tax, type: 'tax' },
         { id: `d-sss-${idx}`, name: 'SSS Contribution', amount: sss, type: 'sss' },
         { id: `d-ph-${idx}`, name: 'PhilHealth', amount: philHealth, type: 'philhealth' },
         { id: `d-pi-${idx}`, name: 'Pag-IBIG', amount: pagIbig, type: 'pagibig' },
       ],
-      totalDeductions,
-      netPay,
+      total_deductions,
+      net_pay,
       status: 'processed',
-      generatedDate,
+      generated_date: generatedDate,
     } as PayrollRecord;
   });
 }
@@ -217,19 +217,19 @@ export function exportReports(
   const rows: string[][] = [
     ['Employee ID', 'Name', 'Department', 'Period', 'Basic Pay', 'Overtime', 'Holiday Pay', 'Bonuses', 'Gross Pay', 'Total Deductions', 'Net Pay', 'Status'],
     ...payrollRecords.map(r => {
-      const emp = employees.find(e => e.id === r.employeeId);
+      const emp = employees.find(e => e.id === r.employee_id);
       return [
-        emp?.employeeId ?? '',
-        r.employeeName,
+        emp?.employee_id ?? '',
+        r.employee_name ?? '',
         emp?.department ?? '',
-        r.period,
-        r.basicPay.toFixed(2),
-        r.overtimePay.toFixed(2),
-        r.holidayPay.toFixed(2),
+        r.period_label,
+        r.basic_pay.toFixed(2),
+        r.overtime_pay.toFixed(2),
+        r.holiday_pay.toFixed(2),
         r.bonuses.toFixed(2),
-        r.grossPay.toFixed(2),
-        r.totalDeductions.toFixed(2),
-        r.netPay.toFixed(2),
+        r.gross_pay.toFixed(2),
+        r.total_deductions.toFixed(2),
+        r.net_pay.toFixed(2),
         r.status,
       ];
     }),
@@ -280,15 +280,15 @@ export function exportDeductionBreakdown(
     ['Employee ID', 'Employee Name', 'Department', 'Deduction Type', 'Amount', 'Period'],
   ];
   payrollRecords.forEach(r => {
-    const emp = employees.find(e => e.id === r.employeeId);
+    const emp = employees.find(e => e.id === r.employee_id);
     r.deductions.forEach(d => {
       rows.push([
-        emp?.employeeId ?? '',
-        r.employeeName,
+        emp?.employee_id ?? '',
+        r.employee_name ?? '',
         emp?.department ?? '',
         d.name,
         d.amount.toFixed(2),
-        r.period,
+        r.period_label,
       ]);
     });
   });
@@ -344,8 +344,8 @@ export function aggregateEarningsSummary(
   // Group records by employee
   const grouped = new Map<string, PayrollRecord[]>();
   payrollRecords.forEach(r => {
-    const prev = grouped.get(r.employeeId) ?? [];
-    grouped.set(r.employeeId, [...prev, r]);
+    const prev = grouped.get(r.employee_id) ?? [];
+    grouped.set(r.employee_id, [...prev, r]);
   });
 
   return employees
@@ -356,21 +356,21 @@ export function aggregateEarningsSummary(
         parseFloat(records.reduce((s, r) => s + fn(r), 0).toFixed(2));
 
       return {
-        employeeId: emp.employeeId,
+        employeeId: emp.employee_id,
         name: emp.name,
         department: emp.department,
         position: emp.position,
-        basicPay: sum(r => r.basicPay),
-        overtimePay: sum(r => r.overtimePay),
-        holidayPay: sum(r => r.holidayPay),
+        basicPay: sum(r => r.basic_pay),
+        overtimePay: sum(r => r.overtime_pay),
+        holidayPay: sum(r => r.holiday_pay),
         bonuses: sum(r => r.bonuses),
-        grossPay: sum(r => r.grossPay),
+        grossPay: sum(r => r.gross_pay),
         tax: sum(r => r.deductions.find(d => d.type === 'tax')?.amount ?? 0),
         sss: sum(r => r.deductions.find(d => d.type === 'sss')?.amount ?? 0),
         philHealth: sum(r => r.deductions.find(d => d.type === 'philhealth')?.amount ?? 0),
         pagIbig: sum(r => r.deductions.find(d => d.type === 'pagibig')?.amount ?? 0),
-        totalDeductions: sum(r => r.totalDeductions),
-        netPay: sum(r => r.netPay),
+        totalDeductions: sum(r => r.total_deductions),
+        netPay: sum(r => r.net_pay),
         payrollCount: records.length,
       };
     });

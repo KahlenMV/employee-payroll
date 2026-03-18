@@ -1,18 +1,43 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Calendar, Clock, Download, CheckCircle, XCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { mockEmployees, mockAttendance, mockLeaveRequests } from '../data/mockData';
+import type { LeaveRequest, Attendance as AttendanceType, Employee } from '../types/payroll';
+import { exportAttendanceAndLeave } from '../utils/exportUtils';
+import { supabase } from '../../lib/supabase';
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import type { LeaveRequest } from '../types/payroll';
-import { applyLeaveDecision, exportAttendanceAndLeave } from '../utils/exportUtils';
 
 export function Attendance() {
   const [selectedYear, setSelectedYear] = useState('2026');
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(mockLeaveRequests);
+  const [attendance, setAttendance] = useState<AttendanceType[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+  const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+  useEffect(() => {
+    fetchData();
+  }, [selectedYear]);
+
+  const fetchData = async () => {
+    setLoading(true);
+    const [attRes, empRes, leaveRes] = await Promise.all([
+      supabase.from('attendance').select('*').gte('date', `${selectedYear}-01-01`).lte('date', `${selectedYear}-12-31`),
+      supabase.from('employees').select('*'),
+      supabase.from('leave_requests').select('*')
+    ]);
+
+    if (attRes.error) showToast('Error fetching attendance: ' + attRes.error.message, 'error');
+    if (empRes.error) showToast('Error fetching employees: ' + empRes.error.message, 'error');
+    if (leaveRes.error) showToast('Error fetching leaves: ' + leaveRes.error.message, 'error');
+
+    setAttendance(attRes.data || []);
+    setEmployees(empRes.data || []);
+    setLeaveRequests(leaveRes.data || []);
+    setLoading(false);
+  };
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
@@ -38,31 +63,38 @@ export function Attendance() {
     }
   };
 
-  // Filter attendance by selected year
-  const attendanceFiltered = mockAttendance.filter(a => a.date.startsWith(selectedYear));
-
-  const totalHoursWorked = attendanceFiltered.reduce((sum, a) => sum + a.hoursWorked, 0);
-  const totalOvertime = attendanceFiltered.reduce((sum, a) => sum + a.overtime, 0);
-  const presentCount = attendanceFiltered.filter(a => a.status === 'present' || a.status === 'late').length;
+  const totalHoursWorked = attendance.reduce((sum, a) => sum + (Number(a.hours_worked) || 0), 0);
+  const totalOvertime = attendance.reduce((sum, a) => sum + (Number(a.overtime) || 0), 0);
+  const presentCount = attendance.filter(a => a.status === 'present' || a.status === 'late').length;
 
   // ── Feature 3: Approve / Reject Leave ─────────────────────────────────────
 
-  const handleLeaveDecision = (id: string, decision: 'approved' | 'rejected') => {
+  const handleLeaveDecision = async (id: string, decision: 'approved' | 'rejected') => {
     const req = leaveRequests.find(r => r.id === id);
     if (!req) return;
-    setLeaveRequests(prev => applyLeaveDecision(prev, id, decision));
-    showToast(
-      `Leave request for ${req.employeeName} has been ${decision}.`,
-      decision === 'approved' ? 'success' : 'error'
-    );
+
+    const { error } = await supabase
+      .from('leave_requests')
+      .update({ status: decision })
+      .eq('id', id);
+
+    if (error) {
+      showToast('Error updating leave: ' + error.message, 'error');
+    } else {
+      setLeaveRequests(prev => prev.map(r => r.id === id ? { ...r, status: decision } : r));
+      showToast(
+        `Leave request for ${req.employee_name || 'employee'} has been ${decision}.`,
+        decision === 'approved' ? 'success' : 'error'
+      );
+    }
   };
 
   // ── Feature 2: Export Attendance & Leave ──────────────────────────────────
 
   const handleExport = () => {
     exportAttendanceAndLeave(
-      mockAttendance,
-      mockEmployees,
+      attendance,
+      employees,
       leaveRequests,
       Number(selectedYear)
     );
@@ -141,11 +173,11 @@ export function Attendance() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-gray-600">Present / Total Records</p>
-                <p className="text-2xl font-semibold mt-2">{presentCount}/{attendanceFiltered.length}</p>
+                <p className="text-2xl font-semibold mt-2">{presentCount}/{attendance.length}</p>
                 <p className="text-xs text-gray-500 mt-1">
                   Attendance rate:{' '}
-                  {attendanceFiltered.length
-                    ? ((presentCount / attendanceFiltered.length) * 100).toFixed(0)
+                  {attendance.length
+                    ? ((presentCount / attendance.length) * 100).toFixed(0)
                     : 0}%
                 </p>
               </div>
@@ -190,18 +222,18 @@ export function Attendance() {
                     </tr>
                   </thead>
                   <tbody>
-                    {attendanceFiltered.length === 0 && (
+                    {attendance.length === 0 && !loading && (
                       <tr><td colSpan={7} className="text-center py-10 text-gray-400">No records for {selectedYear}.</td></tr>
                     )}
-                    {attendanceFiltered.map(record => {
-                      const employee = mockEmployees.find(e => e.id === record.employeeId);
+                    {attendance.map(record => {
+                      const employee = employees.find(e => e.id === record.employee_id);
                       return (
                         <tr key={record.id} className="border-b border-gray-100 hover:bg-gray-50">
                           <td className="py-3 px-4 text-sm">{new Date(record.date).toLocaleDateString()}</td>
                           <td className="py-3 px-4 text-sm font-medium">{employee?.name ?? '—'}</td>
-                          <td className="py-3 px-4 text-sm">{record.timeIn || '—'}</td>
-                          <td className="py-3 px-4 text-sm">{record.timeOut || '—'}</td>
-                          <td className="py-3 px-4 text-sm text-right">{record.hoursWorked.toFixed(1)}h</td>
+                          <td className="py-3 px-4 text-sm">{record.time_in || '—'}</td>
+                          <td className="py-3 px-4 text-sm">{record.time_out || '—'}</td>
+                          <td className="py-3 px-4 text-sm text-right">{(record.hours_worked || 0).toFixed(1)}h</td>
                           <td className="py-3 px-4 text-sm text-right">
                             {record.overtime > 0 ? `${record.overtime.toFixed(1)}h` : '—'}
                           </td>
@@ -239,10 +271,10 @@ export function Attendance() {
                   <tbody>
                     {leaveRequests.map(request => (
                       <tr key={request.id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-3 px-4 text-sm font-medium">{request.employeeName}</td>
-                        <td className="py-3 px-4 text-sm capitalize">{request.leaveType}</td>
-                        <td className="py-3 px-4 text-sm">{new Date(request.startDate).toLocaleDateString()}</td>
-                        <td className="py-3 px-4 text-sm">{new Date(request.endDate).toLocaleDateString()}</td>
+                        <td className="py-3 px-4 text-sm font-medium">{request.employee_name || '—'}</td>
+                        <td className="py-3 px-4 text-sm capitalize">{request.leave_type}</td>
+                        <td className="py-3 px-4 text-sm">{new Date(request.start_date).toLocaleDateString()}</td>
+                        <td className="py-3 px-4 text-sm">{new Date(request.end_date).toLocaleDateString()}</td>
                         <td className="py-3 px-4 text-sm text-center">{request.days}</td>
                         <td className="py-3 px-4 text-sm text-gray-600 max-w-[160px] truncate" title={request.reason}>
                           {request.reason}

@@ -8,7 +8,9 @@ import { Button } from '../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { mockPayrollRecords, mockEmployees } from '../data/mockData';
+import type { PayrollRecord, Employee, Deduction } from '../types/payroll';
+import { supabase } from '../../lib/supabase';
+import { useEffect } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer, PieChart, Pie, Cell,
@@ -38,9 +40,36 @@ const DEFAULT_SCHEDULE: ScheduledReportConfig = existing ?? {
 
 export function Reports() {
   const [selectedPeriod, setSelectedPeriod] = useState('march-2026');
+  const [records, setRecords] = useState<PayrollRecord[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [summaryData, setSummaryData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleForm, setScheduleForm] = useState<ScheduledReportConfig>({ ...DEFAULT_SCHEDULE });
+
+  useEffect(() => {
+    fetchData();
+  }, [selectedPeriod]);
+
+  const fetchData = async () => {
+    setLoading(true);
+    // Fetch records, employees, and the earnings summary view
+    const [recRes, empRes, sumRes] = await Promise.all([
+      supabase.from('payroll_records').select('*, deductions(*)'),
+      supabase.from('employees').select('*'),
+      supabase.from('employee_earnings_summary').select('*')
+    ]);
+
+    if (recRes.error) console.error('Error fetching records:', recRes.error);
+    if (empRes.error) console.error('Error fetching employees:', empRes.error);
+    if (sumRes.error) console.error('Error fetching summary view:', sumRes.error);
+
+    setRecords(recRes.data || []);
+    setEmployees(empRes.data || []);
+    setSummaryData(sumRes.data || []);
+    setLoading(false);
+  };
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -51,56 +80,64 @@ export function Reports() {
 
   const departmentChartData = useMemo(() => {
     const map: Record<string, number> = {};
-    mockEmployees.forEach(emp => {
-      const payroll = mockPayrollRecords.find(p => p.employeeId === emp.id);
-      if (payroll) {
-        map[emp.department] = (map[emp.department] ?? 0) + payroll.netPay;
-      }
+    employees.forEach(emp => {
+      const payrolls = records.filter(p => p.employee_id === emp.id);
+      payrolls.forEach(p => {
+        map[emp.department] = (map[emp.department] ?? 0) + Number(p.net_pay);
+      });
     });
     return Object.entries(map).map(([department, amount], i) => ({ id: `d${i}`, department, amount: Math.round(amount) }));
-  }, []);
+  }, [employees, records]);
 
   const deductionChartData = useMemo(() => {
     const map: Record<string, number> = {};
-    mockPayrollRecords.forEach(r =>
-      r.deductions.forEach(d => { map[d.type] = (map[d.type] ?? 0) + d.amount; })
+    records.forEach(r =>
+      r.deductions.forEach(d => { map[d.type] = (map[d.type] ?? 0) + Number(d.amount); })
     );
     return Object.entries(map).map(([type, value], i) => ({
       id: `ded${i}`, name: type.toUpperCase(), value: Math.round(value),
     }));
-  }, []);
+  }, [records]);
 
   // ── Earnings Summary aggregation ────────────────────────────────────────────
 
-  const earningsSummary = useMemo(
-    () => aggregateEarningsSummary(mockPayrollRecords, mockEmployees),
-    []
-  );
+  const earningsSummary = useMemo(() => {
+    return summaryData.map(s => ({
+      employeeId: s.employee_id,
+      name: s.employee_name,
+      position: s.position,
+      department: s.department,
+      grossPay: s.total_gross_pay,
+      tax: s.total_tax,
+      sss: s.total_sss,
+      philHealth: s.total_philhealth,
+      pagIbig: s.total_pagibig,
+      totalDeductions: s.total_deductions_sum,
+      netPay: s.total_net_pay,
+      payrollCount: s.payroll_count
+    }));
+  }, [summaryData]);
 
-  const totalPayroll    = mockPayrollRecords.reduce((s, p) => s + p.netPay, 0);
-  const totalDeductions = mockPayrollRecords.reduce((s, p) => s + p.totalDeductions, 0);
-  const avgSalary       = totalPayroll / mockPayrollRecords.length;
+  const totalPayroll    = records.reduce((s, p) => s + Number(p.net_pay), 0);
+  const totalDeductions = records.reduce((s, p) => s + Number(p.total_deductions), 0);
+  const avgSalary       = records.length ? totalPayroll / records.length : 0;
 
   const fmt = (n: number) => `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
 
   // ── Feature 6: Export All Reports ──────────────────────────────────────────
 
   const handleExportAll = () => {
-    exportReports(mockPayrollRecords, mockEmployees, selectedPeriod);
+    exportReports(records, employees, selectedPeriod);
     showToast('Full payroll report exported as CSV.');
   };
-
-  // ── Feature 7: Export Department Chart ────────────────────────────────────
 
   const handleExportChart = () => {
     exportChartAsImage('dept-chart-container', `Payroll_by_Department_${selectedPeriod}.png`);
     showToast('Department chart exported as PNG.');
   };
 
-  // ── Feature 8: Export Deduction Breakdown ─────────────────────────────────
-
   const handleExportDeductions = () => {
-    exportDeductionBreakdown(mockPayrollRecords, mockEmployees, selectedPeriod);
+    exportDeductionBreakdown(records, employees, selectedPeriod);
     showToast('Deduction breakdown exported as CSV.');
   };
 
@@ -119,7 +156,7 @@ export function Reports() {
   // ── Feature 10: Export Employee Earnings Summary ───────────────────────────
 
   const handleExportEarnings = () => {
-    exportEarningsSummary(mockPayrollRecords, mockEmployees, selectedPeriod);
+    exportEarningsSummary(records, employees, selectedPeriod);
     showToast('Employee Earnings Summary exported as CSV.');
   };
 

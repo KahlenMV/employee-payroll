@@ -3,14 +3,41 @@ import { Download, FileText, Printer, CheckCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { mockPayrollRecords, mockEmployees } from '../data/mockData';
+import type { PayrollRecord, Employee } from '../types/payroll';
 import { Badge } from '../components/ui/badge';
 import { printPayslip } from '../utils/exportUtils';
+import { supabase } from '../../lib/supabase';
+import { useEffect } from 'react';
 
 export function Payslips() {
-  const [selectedEmployee, setSelectedEmployee] = useState(mockEmployees[0].id);
+  const [selectedEmployee, setSelectedEmployee] = useState<string>('all');
   const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
+  const [records, setRecords] = useState<PayrollRecord[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
+  const [periods, setPeriods] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    const [recRes, empRes, perRes] = await Promise.all([
+      supabase.from('payroll_records').select('*, deductions(*)'),
+      supabase.from('employees').select('*'),
+      supabase.from('payroll_periods').select('*')
+    ]);
+
+    if (recRes.error) console.error(recRes.error);
+    if (empRes.error) console.error(empRes.error);
+
+    setRecords(recRes.data || []);
+    setEmployees(empRes.data || []);
+    setPeriods(perRes.data || []);
+    setLoading(false);
+  };
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -19,14 +46,14 @@ export function Payslips() {
 
   // ── Filtering ─────────────────────────────────────────────────────────────
 
-  const filteredPayslips = mockPayrollRecords.filter(record => {
-    const matchesEmployee = selectedEmployee === 'all' || record.employeeId === selectedEmployee;
-    const matchesPeriod = selectedPeriod === 'all' || record.period === selectedPeriod;
+  const filteredPayslips = records.filter(record => {
+    const matchesEmployee = selectedEmployee === 'all' || record.employee_id === selectedEmployee;
+    const matchesPeriod = selectedPeriod === 'all' || record.period_label === selectedPeriod;
     return matchesEmployee && matchesPeriod;
   });
 
   const previewRecord = filteredPayslips[0];
-  const employee = mockEmployees.find(e => e.id === previewRecord?.employeeId);
+  const employee = employees.find(e => e.id === previewRecord?.employee_id);
 
   const fmt = (n: number) => `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
 
@@ -75,7 +102,7 @@ export function Payslips() {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Employees</SelectItem>
-                  {mockEmployees.map(emp => (
+                  {employees.map(emp => (
                     <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -87,15 +114,16 @@ export function Payslips() {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Periods</SelectItem>
-                  <SelectItem value="February 16-28, 2026">February 16–28, 2026</SelectItem>
-                  <SelectItem value="February 1-15, 2026">February 1–15, 2026</SelectItem>
+                  {periods.map(p => (
+                    <SelectItem key={p.id} value={p.period_label}>{p.period_label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             {previewRecord && (
               <div className="pt-2 border-t space-y-1 text-sm text-gray-600">
                 <p><span className="font-medium">Showing:</span> {filteredPayslips.length} record(s)</p>
-                <p><span className="font-medium">Net Pay:</span> {fmt(previewRecord.netPay)}</p>
+                <p><span className="font-medium">Net Pay:</span> {fmt(previewRecord.net_pay)}</p>
               </div>
             )}
           </CardContent>
@@ -129,22 +157,22 @@ export function Payslips() {
 
                 <div className="text-center">
                   <h4 className="text-lg font-bold">PAYSLIP</h4>
-                  <p className="text-sm text-gray-600">Period: {previewRecord.period}</p>
+                  <p className="text-sm text-gray-600">Period: {previewRecord.period_label}</p>
                 </div>
 
                 {/* Employee Info */}
                 <div className="grid grid-cols-2 gap-4 pb-4 border-b text-sm">
                   {[
                     ['Employee Name', employee.name],
-                    ['Employee ID', employee.employeeId],
+                    ['Employee ID', employee.employee_id],
                     ['Position', employee.position],
                     ['Department', employee.department],
-                    ['Tax ID (TIN)', employee.taxId],
-                    ['Bank Account', employee.bankAccount],
+                    ['Tax ID (TIN)', employee.tax_id],
+                    ['Bank Account', employee.bank_account],
                   ].map(([label, val]) => (
                     <div key={label}>
-                      <p className="text-xs text-gray-500">{label}</p>
-                      <p className="font-medium">{val}</p>
+                      <p className="text-xs text-gray-500">{label ?? ''}</p>
+                      <p className="font-medium">{val ?? '-'}</p>
                     </div>
                   ))}
                 </div>
@@ -154,18 +182,18 @@ export function Payslips() {
                   <div>
                     <h5 className="font-semibold mb-3 uppercase tracking-wide text-xs text-gray-500">Earnings</h5>
                     <div className="space-y-2">
-                      <div className="flex justify-between"><span className="text-gray-600">Basic Pay</span><span className="font-medium">{fmt(previewRecord.basicPay)}</span></div>
-                      {previewRecord.overtimePay > 0 && (
-                        <div className="flex justify-between"><span className="text-gray-600">Overtime Pay</span><span className="font-medium">{fmt(previewRecord.overtimePay)}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-600">Basic Pay</span><span className="font-medium">{fmt(previewRecord.basic_pay)}</span></div>
+                      {previewRecord.overtime_pay > 0 && (
+                        <div className="flex justify-between"><span className="text-gray-600">Overtime Pay</span><span className="font-medium">{fmt(previewRecord.overtime_pay)}</span></div>
                       )}
-                      {previewRecord.holidayPay > 0 && (
-                        <div className="flex justify-between"><span className="text-gray-600">Holiday Pay</span><span className="font-medium">{fmt(previewRecord.holidayPay)}</span></div>
+                      {previewRecord.holiday_pay > 0 && (
+                        <div className="flex justify-between"><span className="text-gray-600">Holiday Pay</span><span className="font-medium">{fmt(previewRecord.holiday_pay)}</span></div>
                       )}
                       {previewRecord.bonuses > 0 && (
                         <div className="flex justify-between"><span className="text-gray-600">Bonuses</span><span className="font-medium">{fmt(previewRecord.bonuses)}</span></div>
                       )}
                       <div className="flex justify-between border-t pt-2 font-semibold">
-                        <span>Gross Pay</span><span>{fmt(previewRecord.grossPay)}</span>
+                        <span>Gross Pay</span><span>{fmt(previewRecord.gross_pay)}</span>
                       </div>
                     </div>
                   </div>
@@ -180,7 +208,7 @@ export function Payslips() {
                       ))}
                       <div className="flex justify-between border-t pt-2 font-semibold">
                         <span>Total Deductions</span>
-                        <span className="text-red-600">{fmt(previewRecord.totalDeductions)}</span>
+                        <span className="text-red-600">{fmt(previewRecord.total_deductions)}</span>
                       </div>
                     </div>
                   </div>
@@ -190,7 +218,7 @@ export function Payslips() {
                 <div className="bg-gray-50 rounded-lg p-4 border-t-2 border-gray-300">
                   <div className="flex justify-between items-center">
                     <span className="text-lg font-bold">NET PAY</span>
-                    <span className="text-2xl font-bold text-green-600">{fmt(previewRecord.netPay)}</span>
+                    <span className="text-2xl font-bold text-green-600">{fmt(previewRecord.net_pay)}</span>
                   </div>
                 </div>
 
@@ -199,13 +227,13 @@ export function Payslips() {
                   <h5 className="font-semibold mb-3 text-xs uppercase tracking-wide text-gray-500">Government Contributions</h5>
                   <div className="grid grid-cols-3 gap-4 text-sm">
                     {[
-                      ['SSS Number', employee.sssNumber],
-                      ['PhilHealth Number', employee.philHealthNumber],
-                      ['Pag-IBIG Number', employee.pagIbigNumber],
+                      ['SSS Number', employee.sss_number],
+                      ['PhilHealth Number', employee.philhealth_number],
+                      ['Pag-IBIG Number', employee.pagibig_number],
                     ].map(([label, val]) => (
                       <div key={label}>
-                        <p className="text-xs text-gray-500">{label}</p>
-                        <p className="font-medium">{val}</p>
+                        <p className="text-xs text-gray-500">{label ?? ''}</p>
+                        <p className="font-medium">{val ?? '-'}</p>
                       </div>
                     ))}
                   </div>
@@ -214,7 +242,7 @@ export function Payslips() {
                 {/* Footer */}
                 <div className="text-center text-xs text-gray-400 pt-4 border-t">
                   <p>This is a computer-generated payslip and does not require a signature.</p>
-                  <p>Generated on: {new Date(previewRecord.generatedDate).toLocaleDateString()}</p>
+                  <p>Generated on: {new Date(previewRecord.generated_date).toLocaleDateString()}</p>
                 </div>
               </div>
             </CardContent>
@@ -242,33 +270,36 @@ export function Payslips() {
                 </tr>
               </thead>
               <tbody>
-                {filteredPayslips.map(record => (
-                  <tr key={record.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-4 text-sm font-medium">{record.employeeName}</td>
-                    <td className="py-3 px-4 text-sm text-gray-600">{record.period}</td>
-                    <td className="py-3 px-4 text-sm text-right font-medium">{fmt(record.netPay)}</td>
-                    <td className="py-3 px-4">
-                      <Badge className={getStatusBadge(record.status)}>{record.status}</Badge>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center justify-center gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => setSelectedEmployee(record.employeeId)}>
-                          <FileText className="w-4 h-4 mr-1" /> View
-                        </Button>
-                        <Button
-                          variant="ghost" size="sm"
-                          onClick={() => {
-                            setSelectedEmployee(record.employeeId);
-                            setTimeout(() => printPayslip('payslip-preview'), 200);
-                            showToast('Payslip sent to printer.');
-                          }}
-                        >
-                          <Download className="w-4 h-4 mr-1" /> Download
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {filteredPayslips.map(record => {
+                  const emp = employees.find(e => e.id === record.employee_id);
+                  return (
+                    <tr key={record.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-3 px-4 text-sm font-medium">{emp?.name || 'N/A'}</td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{record.period_label}</td>
+                      <td className="py-3 px-4 text-sm text-right font-medium">{fmt(record.net_pay)}</td>
+                      <td className="py-3 px-4">
+                        <Badge className={getStatusBadge(record.status)}>{record.status}</Badge>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center justify-center gap-2">
+                          <Button variant="ghost" size="sm" onClick={() => setSelectedEmployee(record.employee_id)}>
+                            <FileText className="w-4 h-4 mr-1" /> View
+                          </Button>
+                          <Button
+                            variant="ghost" size="sm"
+                            onClick={() => {
+                              setSelectedEmployee(record.employee_id);
+                              setTimeout(() => printPayslip('payslip-preview'), 200);
+                              showToast('Payslip sent to printer.');
+                            }}
+                          >
+                            <Download className="w-4 h-4 mr-1" /> Download
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {filteredPayslips.length === 0 && (
                   <tr><td colSpan={5} className="text-center py-10 text-gray-400">No records found.</td></tr>
                 )}

@@ -4,7 +4,6 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardHeader } from '../components/ui/card';
-import { mockEmployees } from '../data/mockData';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogTrigger, DialogDescription, DialogFooter,
@@ -13,6 +12,8 @@ import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import type { Employee, EmploymentStatus } from '../types/payroll';
 import { generateEmployeeId, calcHourlyRate } from '../utils/exportUtils';
+import { supabase } from '../../lib/supabase';
+import { useEffect } from 'react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,16 +29,41 @@ const EMPTY_FORM = {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function Employees() {
-  const [employees, setEmployees] = useState<Employee[]>(mockEmployees);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedEmployee, setSelectedEmployee] = useState<Employee>(mockEmployees[0]);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [editForm, setEditForm] = useState({ ...EMPTY_FORM });
   const [toast, setToast] = useState<Toast | null>(null);
-  const [errors, setErrors] = useState<Partial<typeof EMPTY_FORM>>({});
+  const [errors, setErrors] = useState<Partial<Record<keyof typeof EMPTY_FORM, string>>>({});
+
+  // ── Data Fetching ─────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    fetchEmployees();
+  }, []);
+
+  const fetchEmployees = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('employees')
+      .select('*')
+      .order('employee_id', { ascending: true });
+
+    if (error) {
+      showToast('Error fetching employees: ' + error.message, 'error');
+    } else {
+      setEmployees(data || []);
+      if (data && data.length > 0 && !selectedEmployee) {
+        setSelectedEmployee(data[0]);
+      }
+    }
+    setLoading(false);
+  };
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -48,7 +74,7 @@ export function Employees() {
 
   const filteredEmployees = employees.filter(emp =>
     emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    emp.employeeId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    emp.employee_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
     emp.department.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -64,7 +90,7 @@ export function Employees() {
   // ── Validation ───────────────────────────────────────────────────────────────
 
   const validate = (f: typeof EMPTY_FORM) => {
-    const errs: Partial<typeof EMPTY_FORM> = {};
+    const errs: Partial<Record<keyof typeof EMPTY_FORM, string>> = {};
     if (!f.name.trim()) errs.name = 'Required';
     if (!f.position.trim()) errs.position = 'Required';
     if (!f.department) errs.department = 'Required';
@@ -78,32 +104,41 @@ export function Employees() {
 
   // ── Add Employee ─────────────────────────────────────────────────────────────
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     const errs = validate(form);
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setErrors({});
-    const basicPay = Number(form.basicPay);
-    const newEmp: Employee = {
-      id: String(Date.now()),
-      employeeId: generateEmployeeId(employees),
-      name: form.name.trim(),
-      position: form.position.trim(),
-      department: form.department,
-      status: form.status as EmploymentStatus,
-      basicPay,
-      hourlyRate: calcHourlyRate(basicPay),
-      email: form.email.trim(),
-      hireDate: form.hireDate,
-      taxId: form.taxId.trim() || 'TIN-000-000-000',
-      sssNumber: form.sssNumber.trim() || 'SSS-00-0000000-0',
-      philHealthNumber: form.philHealthNumber.trim() || 'PH-00-000000000-0',
-      pagIbigNumber: form.pagIbigNumber.trim() || 'HDMF-0000-0000-0000',
-      bankAccount: form.bankAccount.trim() || 'BDO-0000000000',
-    };
-    setEmployees(prev => [...prev, newEmp]);
-    setForm({ ...EMPTY_FORM });
-    setAddOpen(false);
-    showToast(`${newEmp.name} (${newEmp.employeeId}) added successfully.`);
+    const basicPayNum = Number(form.basicPay);
+    const hourlyRate = calcHourlyRate(basicPayNum);
+    
+    const { data, error } = await supabase
+      .from('employees')
+      .insert([{
+        employee_id: generateEmployeeId(employees),
+        name: form.name.trim(),
+        position: form.position.trim(),
+        department: form.department,
+        status: form.status,
+        basic_pay: basicPayNum,
+        hourly_rate: hourlyRate,
+        email: form.email.trim(),
+        hire_date: form.hireDate,
+        tax_id: form.taxId.trim() || null,
+        sss_number: form.sssNumber.trim() || null,
+        philhealth_number: form.philHealthNumber.trim() || null,
+        pagibig_number: form.pagIbigNumber.trim() || null,
+        bank_account: form.bankAccount.trim() || null,
+      }])
+      .select();
+
+    if (error) {
+      showToast('Error adding employee: ' + error.message, 'error');
+    } else {
+      setEmployees(prev => [...prev, data[0]]);
+      setForm({ ...EMPTY_FORM });
+      setAddOpen(false);
+      showToast(`${data[0].name} (${data[0].employee_id}) added successfully.`);
+    }
   };
 
   // ── Edit Employee ────────────────────────────────────────────────────────────
@@ -112,49 +147,69 @@ export function Employees() {
     setSelectedEmployee(emp);
     setEditForm({
       name: emp.name, position: emp.position, department: emp.department,
-      status: emp.status, basicPay: String(emp.basicPay), email: emp.email,
-      hireDate: emp.hireDate, taxId: emp.taxId, sssNumber: emp.sssNumber,
-      philHealthNumber: emp.philHealthNumber, pagIbigNumber: emp.pagIbigNumber,
-      bankAccount: emp.bankAccount,
+      status: emp.status, basicPay: String(emp.basic_pay), email: emp.email,
+      hireDate: emp.hire_date, taxId: emp.tax_id || '', sssNumber: emp.sss_number || '',
+      philHealthNumber: emp.philhealth_number || '', pagIbigNumber: emp.pagibig_number || '',
+      bankAccount: emp.bank_account || '',
     });
     setEditOpen(true);
   };
 
-  const handleEdit = () => {
+  const handleEdit = async () => {
+    if (!selectedEmployee) return;
     const errs = validate(editForm);
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setErrors({});
-    const basicPay = Number(editForm.basicPay);
-    setEmployees(prev => prev.map(e =>
-      e.id !== selectedEmployee.id ? e : {
-        ...e,
+    const basicPayNum = Number(editForm.basicPay);
+    const hourlyRate = calcHourlyRate(basicPayNum);
+
+    const { data, error } = await supabase
+      .from('employees')
+      .update({
         name: editForm.name.trim(),
         position: editForm.position.trim(),
         department: editForm.department,
-        status: editForm.status as EmploymentStatus,
-        basicPay,
-        hourlyRate: calcHourlyRate(basicPay),
+        status: editForm.status,
+        basic_pay: basicPayNum,
+        hourly_rate: hourlyRate,
         email: editForm.email.trim(),
-        hireDate: editForm.hireDate,
-        taxId: editForm.taxId.trim(),
-        sssNumber: editForm.sssNumber.trim(),
-        philHealthNumber: editForm.philHealthNumber.trim(),
-        pagIbigNumber: editForm.pagIbigNumber.trim(),
-        bankAccount: editForm.bankAccount.trim(),
-      }
-    ));
-    setEditOpen(false);
-    showToast(`${editForm.name} updated successfully.`);
+        hire_date: editForm.hireDate,
+        tax_id: editForm.taxId.trim(),
+        sss_number: editForm.sssNumber.trim(),
+        philhealth_number: editForm.philHealthNumber.trim(),
+        pagibig_number: editForm.pagIbigNumber.trim(),
+        bank_account: editForm.bankAccount.trim(),
+      })
+      .eq('id', selectedEmployee.id)
+      .select();
+
+    if (error) {
+      showToast('Error updating employee: ' + error.message, 'error');
+    } else {
+      setEmployees(prev => prev.map(e => e.id === selectedEmployee.id ? data[0] : e));
+      setEditOpen(false);
+      showToast(`${editForm.name} updated successfully.`);
+    }
   };
 
   // ── Delete Employee ──────────────────────────────────────────────────────────
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteId) return;
     const emp = employees.find(e => e.id === deleteId);
-    setEmployees(prev => prev.filter(e => e.id !== deleteId));
-    setDeleteId(null);
-    showToast(`${emp?.name} removed from the system.`, 'error');
+    
+    const { error } = await supabase
+      .from('employees')
+      .delete()
+      .eq('id', deleteId);
+
+    if (error) {
+      showToast('Error deleting employee: ' + error.message, 'error');
+    } else {
+      setEmployees(prev => prev.filter(e => e.id !== deleteId));
+      setDeleteId(null);
+      showToast(`${emp?.name} removed from the system.`, 'error');
+    }
   };
 
   // ── Field helper ─────────────────────────────────────────────────────────────
@@ -246,14 +301,14 @@ export function Employees() {
                 )}
                 {filteredEmployees.map(employee => (
                   <tr key={employee.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-4 text-sm font-medium">{employee.employeeId}</td>
+                    <td className="py-3 px-4 text-sm font-medium">{employee.employee_id}</td>
                     <td className="py-3 px-4 text-sm">{employee.name}</td>
                     <td className="py-3 px-4 text-sm text-gray-600">{employee.position}</td>
                     <td className="py-3 px-4 text-sm text-gray-600">{employee.department}</td>
                     <td className="py-3 px-4">
                       <Badge className={getStatusColor(employee.status)}>{employee.status}</Badge>
                     </td>
-                    <td className="py-3 px-4 text-sm text-right">₱{employee.basicPay.toLocaleString()}</td>
+                    <td className="py-3 px-4 text-sm text-right">₱{employee.basic_pay.toLocaleString()}</td>
                     <td className="py-3 px-4">
                       <div className="flex items-center justify-center gap-1">
                         {/* View */}
@@ -268,34 +323,36 @@ export function Employees() {
                               <DialogTitle>Employee Details</DialogTitle>
                               <DialogDescription>Read-only view of employee record.</DialogDescription>
                             </DialogHeader>
-                            <div className="grid grid-cols-2 gap-4 py-4">
-                              {[
-                                ['Employee ID', selectedEmployee.employeeId],
-                                ['Full Name', selectedEmployee.name],
-                                ['Position', selectedEmployee.position],
-                                ['Department', selectedEmployee.department],
-                                ['Hire Date', new Date(selectedEmployee.hireDate).toLocaleDateString()],
-                                ['Basic Pay', `₱${selectedEmployee.basicPay.toLocaleString()}`],
-                                ['Hourly Rate', `₱${selectedEmployee.hourlyRate.toLocaleString()}`],
-                                ['Email', selectedEmployee.email],
-                                ['Bank Account', selectedEmployee.bankAccount],
-                                ['TIN', selectedEmployee.taxId],
-                                ['SSS', selectedEmployee.sssNumber],
-                                ['PhilHealth', selectedEmployee.philHealthNumber],
-                                ['Pag-IBIG', selectedEmployee.pagIbigNumber],
-                              ].map(([label, val]) => (
-                                <div key={label}>
-                                  <p className="text-sm text-gray-500">{label}</p>
-                                  <p className="font-medium text-sm">{val}</p>
+                            {selectedEmployee && (
+                              <div className="grid grid-cols-2 gap-4 py-4">
+                                {[
+                                  ['Employee ID', selectedEmployee.employee_id],
+                                  ['Full Name', selectedEmployee.name],
+                                  ['Position', selectedEmployee.position],
+                                  ['Department', selectedEmployee.department],
+                                  ['Hire Date', new Date(selectedEmployee.hire_date).toLocaleDateString()],
+                                  ['Basic Pay', `₱${selectedEmployee.basic_pay.toLocaleString()}`],
+                                  ['Hourly Rate', `₱${selectedEmployee.hourly_rate.toLocaleString()}`],
+                                  ['Email', selectedEmployee.email],
+                                  ['Bank Account', selectedEmployee.bank_account],
+                                  ['TIN', selectedEmployee.tax_id],
+                                  ['SSS', selectedEmployee.sss_number],
+                                  ['PhilHealth', selectedEmployee.philhealth_number],
+                                  ['Pag-IBIG', selectedEmployee.pagibig_number],
+                                ].map(([label, val]) => (
+                                  <div key={label}>
+                                    <p className="text-sm text-gray-500">{label}</p>
+                                    <p className="font-medium text-sm">{val}</p>
+                                  </div>
+                                ))}
+                                <div>
+                                  <p className="text-sm text-gray-500">Status</p>
+                                  <Badge className={getStatusColor(selectedEmployee.status)}>
+                                    {selectedEmployee.status}
+                                  </Badge>
                                 </div>
-                              ))}
-                              <div>
-                                <p className="text-sm text-gray-500">Status</p>
-                                <Badge className={getStatusColor(selectedEmployee.status)}>
-                                  {selectedEmployee.status}
-                                </Badge>
                               </div>
-                            </div>
+                            )}
                           </DialogContent>
                         </Dialog>
 
@@ -327,7 +384,7 @@ export function Employees() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Employee</DialogTitle>
-            <DialogDescription>Update {selectedEmployee.name}'s information.</DialogDescription>
+            <DialogDescription>Update {selectedEmployee?.name}'s information.</DialogDescription>
           </DialogHeader>
           <EmployeeForm
             f={editForm} setF={setEditForm} errors={errors}
@@ -364,7 +421,7 @@ export function Employees() {
 interface EmployeeFormProps {
   f: typeof EMPTY_FORM;
   setF: React.Dispatch<React.SetStateAction<typeof EMPTY_FORM>>;
-  errors: Partial<typeof EMPTY_FORM>;
+  errors: Partial<Record<keyof typeof EMPTY_FORM, string>>;
   employees: Employee[];
   fieldClass: (err?: string) => string;
 }
@@ -375,27 +432,30 @@ function EmployeeForm({ f, setF, errors, fieldClass }: EmployeeFormProps) {
   const onChange = (key: keyof typeof EMPTY_FORM) =>
     (e: React.ChangeEvent<HTMLInputElement>) => setF(prev => ({ ...prev, [key]: e.target.value }));
 
+  // Helper to safely get error message
+  const getError = (key: keyof typeof EMPTY_FORM) => errors[key];
+
   return (
     <div className="grid grid-cols-2 gap-4 py-4">
       {/* Full Name */}
       <div className="space-y-1">
         <Label htmlFor="name">Full Name <span className="text-red-500">*</span></Label>
-        <Input id="name" value={f.name} onChange={onChange('name')} className={fieldClass(errors.name)} placeholder="e.g. Maria Santos" />
-        {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
+        <Input id="name" value={f.name} onChange={onChange('name')} className={fieldClass(getError('name'))} placeholder="e.g. Maria Santos" />
+        {getError('name') && <p className="text-xs text-red-500">{getError('name')}</p>}
       </div>
 
       {/* Position */}
       <div className="space-y-1">
         <Label htmlFor="position">Position <span className="text-red-500">*</span></Label>
-        <Input id="position" value={f.position} onChange={onChange('position')} className={fieldClass(errors.position)} placeholder="e.g. Software Engineer" />
-        {errors.position && <p className="text-xs text-red-500">{errors.position}</p>}
+        <Input id="position" value={f.position} onChange={onChange('position')} className={fieldClass(getError('position'))} placeholder="e.g. Software Engineer" />
+        {getError('position') && <p className="text-xs text-red-500">{getError('position')}</p>}
       </div>
 
       {/* Department */}
       <div className="space-y-1">
         <Label>Department <span className="text-red-500">*</span></Label>
         <Select value={f.department} onValueChange={set('department')}>
-          <SelectTrigger className={fieldClass(errors.department)}>
+          <SelectTrigger className={fieldClass(getError('department'))}>
             <SelectValue placeholder="Select department" />
           </SelectTrigger>
           <SelectContent>
@@ -404,14 +464,14 @@ function EmployeeForm({ f, setF, errors, fieldClass }: EmployeeFormProps) {
             ))}
           </SelectContent>
         </Select>
-        {errors.department && <p className="text-xs text-red-500">{errors.department}</p>}
+        {getError('department') && <p className="text-xs text-red-500">{getError('department')}</p>}
       </div>
 
       {/* Status */}
       <div className="space-y-1">
         <Label>Employment Status <span className="text-red-500">*</span></Label>
         <Select value={f.status} onValueChange={set('status')}>
-          <SelectTrigger className={fieldClass(errors.status)}>
+          <SelectTrigger className={fieldClass(getError('status'))}>
             <SelectValue placeholder="Select status" />
           </SelectTrigger>
           <SelectContent>
@@ -420,14 +480,14 @@ function EmployeeForm({ f, setF, errors, fieldClass }: EmployeeFormProps) {
             <SelectItem value="probationary">Probationary</SelectItem>
           </SelectContent>
         </Select>
-        {errors.status && <p className="text-xs text-red-500">{errors.status}</p>}
+        {getError('status') && <p className="text-xs text-red-500">{getError('status')}</p>}
       </div>
 
       {/* Basic Pay */}
       <div className="space-y-1">
         <Label htmlFor="basicPay">Basic Pay (₱) <span className="text-red-500">*</span></Label>
-        <Input id="basicPay" type="number" value={f.basicPay} onChange={onChange('basicPay')} className={fieldClass(errors.basicPay)} placeholder="50000" min={1} />
-        {errors.basicPay && <p className="text-xs text-red-500">{errors.basicPay}</p>}
+        <Input id="basicPay" type="number" value={f.basicPay} onChange={onChange('basicPay')} className={fieldClass(getError('basicPay'))} placeholder="50000" min={1} />
+        {getError('basicPay') && <p className="text-xs text-red-500">{getError('basicPay')}</p>}
         {f.basicPay && !isNaN(Number(f.basicPay)) && (
           <p className="text-xs text-gray-400">Hourly rate: ₱{calcHourlyRate(Number(f.basicPay)).toFixed(2)}</p>
         )}
@@ -436,15 +496,15 @@ function EmployeeForm({ f, setF, errors, fieldClass }: EmployeeFormProps) {
       {/* Email */}
       <div className="space-y-1">
         <Label htmlFor="email">Email <span className="text-red-500">*</span></Label>
-        <Input id="email" type="email" value={f.email} onChange={onChange('email')} className={fieldClass(errors.email)} placeholder="name@company.com" />
-        {errors.email && <p className="text-xs text-red-500">{errors.email}</p>}
+        <Input id="email" type="email" value={f.email} onChange={onChange('email')} className={fieldClass(getError('email'))} placeholder="name@company.com" />
+        {getError('email') && <p className="text-xs text-red-500">{getError('email')}</p>}
       </div>
 
       {/* Hire Date */}
       <div className="space-y-1">
         <Label htmlFor="hireDate">Hire Date <span className="text-red-500">*</span></Label>
-        <Input id="hireDate" type="date" value={f.hireDate} onChange={onChange('hireDate')} className={fieldClass(errors.hireDate)} />
-        {errors.hireDate && <p className="text-xs text-red-500">{errors.hireDate}</p>}
+        <Input id="hireDate" type="date" value={f.hireDate} onChange={onChange('hireDate')} className={fieldClass(getError('hireDate'))} />
+        {getError('hireDate') && <p className="text-xs text-red-500">{getError('hireDate')}</p>}
       </div>
 
       {/* TIN */}

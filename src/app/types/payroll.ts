@@ -5,33 +5,33 @@ export type UserRole = 'admin' | 'hr-manager' | 'payroll-officer' | 'employee';
 
 export interface Employee {
   id: string;
-  employeeId: string;
+  employee_id: string;
   name: string;
   position: string;
   department: string;
   status: EmploymentStatus;
-  basicPay: number;
-  hourlyRate: number;
-  taxId: string;
-  sssNumber: string;
-  philHealthNumber: string;
-  pagIbigNumber: string;
-  bankAccount: string;
+  basic_pay: number;
+  hourly_rate: number;
+  tax_id?: string;
+  sss_number?: string;
+  philhealth_number?: string;
+  pagibig_number?: string;
+  bank_account?: string;
   email: string;
-  hireDate: string;
-  avatar?: string;
+  hire_date: string;
+  avatar_url?: string;
 }
 
 export interface Attendance {
   id: string;
-  employeeId: string;
+  employee_id: string;
   date: string;
-  timeIn: string;
-  timeOut: string;
-  hoursWorked: number;
+  time_in: string;
+  time_out: string;
+  hours_worked: number;
   overtime: number;
   status: 'present' | 'absent' | 'late' | 'on-leave';
-  leaveType?: LeaveType;
+  leave_type?: LeaveType;
 }
 
 export interface Deduction {
@@ -43,29 +43,29 @@ export interface Deduction {
 
 export interface PayrollRecord {
   id: string;
-  employeeId: string;
-  employeeName: string;
-  period: string;
-  periodType: PayrollPeriod;
-  basicPay: number;
-  overtimePay: number;
-  holidayPay: number;
+  employee_id: string;
+  employee_name?: string; // Virtual or joined
+  period_label: string;
+  period_type: PayrollPeriod;
+  basic_pay: number;
+  overtime_pay: number;
+  holiday_pay: number;
   bonuses: number;
-  grossPay: number;
+  gross_pay: number;
   deductions: Deduction[];
-  totalDeductions: number;
-  netPay: number;
+  total_deductions: number;
+  net_pay: number;
   status: 'pending' | 'processed' | 'paid';
-  generatedDate: string;
+  generated_date: string;
 }
 
 export interface LeaveRequest {
   id: string;
-  employeeId: string;
-  employeeName: string;
-  leaveType: LeaveType;
-  startDate: string;
-  endDate: string;
+  employee_id: string;
+  employee_name?: string; // Virtual or joined
+  leave_type: LeaveType;
+  start_date: string;
+  end_date: string;
   days: number;
   reason: string;
   status: 'pending' | 'approved' | 'rejected';

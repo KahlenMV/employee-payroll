@@ -3,11 +3,12 @@ import { Calculator, DollarSign, Download, Play, CheckCircle } from 'lucide-reac
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { mockPayrollRecords, mockEmployees, mockAttendance } from '../data/mockData';
 import { Badge } from '../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '../components/ui/dialog';
-import type { PayrollRecord } from '../types/payroll';
+import type { PayrollRecord, Employee, Attendance, Deduction } from '../types/payroll';
 import { processPayroll, exportReports } from '../utils/exportUtils';
+import { supabase } from '../../lib/supabase';
+import { useEffect } from 'react';
 
 // ── Period options metadata ────────────────────────────────────────────────────
 
@@ -21,10 +22,73 @@ type PeriodValue = typeof PERIODS[number]['value'];
 
 export function Payroll() {
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodValue>('feb-16-28-2026');
-  const [records, setRecords] = useState<PayrollRecord[]>(mockPayrollRecords);
-  const [selectedRecord, setSelectedRecord] = useState<PayrollRecord>(records[0]);
+  const [records, setRecords] = useState<PayrollRecord[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [attendance, setAttendance] = useState<Attendance[]>([]);
+  const [selectedRecord, setSelectedRecord] = useState<PayrollRecord | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
+  const [periodId, setPeriodId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchData();
+  }, [selectedPeriod]);
+
+  const fetchData = async () => {
+    setLoading(true);
+    const meta = PERIODS.find(p => p.value === selectedPeriod)!;
+
+    // 1. Get or Ensure Period exists
+    let pId: string | null = null;
+    const { data: pData, error: pError } = await supabase
+      .from('payroll_periods')
+      .select('id')
+      .eq('period_label', meta.label)
+      .single();
+    
+    if (pError || !pData) {
+      const { data: newP, error: newPError } = await supabase
+        .from('payroll_periods')
+        .insert({
+          period_label: meta.label,
+          period_start: meta.start,
+          period_end: meta.end,
+          period_type: 'semi-monthly'
+        })
+        .select()
+        .single();
+      if (newPError) showToast('Error creating period: ' + newPError.message);
+      pId = newP?.id || null;
+    } else {
+      pId = pData.id;
+    }
+    setPeriodId(pId);
+
+    if (!pId) { setLoading(false); return; }
+
+    // 2. Fetch records, employees, and attendance
+    const [recRes, empRes, attRes] = await Promise.all([
+      supabase.from('payroll_records').select('*, deductions(*)').eq('period_id', pId),
+      supabase.from('employees').select('*'),
+      supabase.from('attendance').select('*').gte('date', meta.start).lte('date', meta.end)
+    ]);
+
+    if (recRes.error) showToast('Error fetching records: ' + recRes.error.message);
+    if (empRes.error) showToast('Error fetching employees: ' + empRes.error.message);
+    if (attRes.error) showToast('Error fetching attendance: ' + attRes.error.message);
+
+    const fetchedRecords = (recRes.data || []).map(r => ({
+      ...r,
+      employee_name: (empRes.data || []).find(e => e.id === r.employee_id)?.name
+    }));
+
+    setRecords(fetchedRecords);
+    setEmployees(empRes.data || []);
+    setAttendance(attRes.data || []);
+    if (fetchedRecords.length > 0) setSelectedRecord(fetchedRecords[0]);
+    setLoading(false);
+  };
 
   const currentPeriodMeta = PERIODS.find(p => p.value === selectedPeriod)!;
 
@@ -34,9 +98,9 @@ export function Payroll() {
   };
 
   // Summary totals (for the currently shown records)
-  const totalGrossPay     = records.reduce((s, p) => s + p.grossPay, 0);
-  const totalDeductions   = records.reduce((s, p) => s + p.totalDeductions, 0);
-  const totalNetPay       = records.reduce((s, p) => s + p.netPay, 0);
+  const totalGrossPay     = records.reduce((s, p) => s + (p.gross_pay || 0), 0);
+  const totalDeductions   = records.reduce((s, p) => s + (p.total_deductions || 0), 0);
+  const totalNetPay       = records.reduce((s, p) => s + (p.net_pay || 0), 0);
   const processedCount    = records.filter(p => p.status !== 'pending').length;
 
   const getStatusColor = (status: string) => {
@@ -50,34 +114,70 @@ export function Payroll() {
 
   // ── Feature 4: Process Payroll ─────────────────────────────────────────────
 
-  const handleProcessPayroll = () => {
+  const handleProcessPayroll = async () => {
+    if (!periodId) return;
     setProcessing(true);
-    // Simulate async processing (e.g. API call or heavy computation)
-    setTimeout(() => {
-      try {
-        const newRecords = processPayroll({
-          employees: mockEmployees,
-          attendance: mockAttendance,
-          period: currentPeriodMeta.label,
-          periodType: 'semi-monthly',
-          periodStart: currentPeriodMeta.start,
-          periodEnd: currentPeriodMeta.end,
-        }, records);
-        setRecords(newRecords);
-        setSelectedRecord(newRecords[0]);
-        showToast(`Payroll processed for ${currentPeriodMeta.label} — ${newRecords.length} employee(s) updated.`);
-      } catch (err) {
-        showToast(err instanceof Error ? err.message : 'Processing failed.');
-      } finally {
-        setProcessing(false);
+    try {
+      const newRecords = processPayroll({
+        employees: employees,
+        attendance: attendance,
+        period: currentPeriodMeta.label,
+        periodType: 'semi-monthly',
+        periodStart: currentPeriodMeta.start,
+        periodEnd: currentPeriodMeta.end,
+      }, records);
+
+      // Save to Supabase (Sequential to handle foreign keys)
+      for (const r of newRecords) {
+        // 1. Upsert Record
+        const { data: savedRecord, error: recError } = await supabase
+          .from('payroll_records')
+          .upsert({
+            employee_id: r.employee_id,
+            period_id: periodId,
+            basic_pay: r.basic_pay,
+            overtime_pay: r.overtime_pay,
+            holiday_pay: r.holiday_pay,
+            bonuses: r.bonuses,
+            gross_pay: r.gross_pay,
+            total_deductions: r.total_deductions,
+            net_pay: r.net_pay,
+            status: 'processed',
+          }, { onConflict: 'employee_id,period_id' })
+          .select()
+          .single();
+
+        if (recError) throw recError;
+
+        // 2. Delete existing deductions for this record to refresh
+        await supabase.from('deductions').delete().eq('payroll_record_id', savedRecord.id);
+
+        // 3. Insert new deductions
+        const { error: dedError } = await supabase
+          .from('deductions')
+          .insert(r.deductions.map((d: Deduction) => ({
+            payroll_record_id: savedRecord.id,
+            name: d.name,
+            amount: d.amount,
+            type: d.type
+          })));
+        
+        if (dedError) throw dedError;
       }
-    }, 800);
+
+      await fetchData(); // Refresh all
+      showToast(`Payroll processed and saved for ${currentPeriodMeta.label}.`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Processing failed.');
+    } finally {
+      setProcessing(false);
+    }
   };
 
   // ── Feature 6 (partial): Export to Excel from Payroll tab ─────────────────
 
   const handleExport = () => {
-    exportReports(records, mockEmployees, currentPeriodMeta.label);
+    exportReports(records, employees, currentPeriodMeta.label);
     showToast('Payroll report exported as CSV.');
   };
 
@@ -187,14 +287,14 @@ export function Payroll() {
               <tbody>
                 {records.map(record => (
                   <tr key={record.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-4 text-sm font-medium">{record.employeeName}</td>
-                    <td className="py-3 px-4 text-sm text-right">₱{record.basicPay.toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
-                    <td className="py-3 px-4 text-sm text-right">₱{record.overtimePay.toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
-                    <td className="py-3 px-4 text-sm text-right">₱{record.holidayPay.toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
-                    <td className="py-3 px-4 text-sm text-right">₱{record.bonuses.toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
-                    <td className="py-3 px-4 text-sm text-right font-medium">₱{record.grossPay.toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
-                    <td className="py-3 px-4 text-sm text-right text-red-600">-₱{record.totalDeductions.toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
-                    <td className="py-3 px-4 text-sm text-right font-semibold text-green-600">₱{record.netPay.toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
+                    <td className="py-3 px-4 text-sm font-medium">{record.employee_name || '—'}</td>
+                    <td className="py-3 px-4 text-sm text-right">₱{(record.basic_pay || 0).toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
+                    <td className="py-3 px-4 text-sm text-right">₱{(record.overtime_pay || 0).toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
+                    <td className="py-3 px-4 text-sm text-right">₱{(record.holiday_pay || 0).toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
+                    <td className="py-3 px-4 text-sm text-right">₱{(record.bonuses || 0).toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
+                    <td className="py-3 px-4 text-sm text-right font-medium">₱{(record.gross_pay || 0).toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
+                    <td className="py-3 px-4 text-sm text-right text-red-600">-₱{(record.total_deductions || 0).toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
+                    <td className="py-3 px-4 text-sm text-right font-semibold text-green-600">₱{(record.net_pay || 0).toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
                     <td className="py-3 px-4 text-center">
                       <Badge className={getStatusColor(record.status)}>{record.status}</Badge>
                     </td>
@@ -207,18 +307,18 @@ export function Payroll() {
                         </DialogTrigger>
                         <DialogContent className="max-w-2xl">
                           <DialogHeader>
-                            <DialogTitle>Payroll Details — {selectedRecord.employeeName}</DialogTitle>
+                            <DialogTitle>Payroll Details — {selectedRecord?.employee_name || 'Employee'}</DialogTitle>
                             <DialogDescription>
-                              Period: {selectedRecord.period} · Status: {selectedRecord.status}
+                              Period: {selectedRecord?.period_label} · Status: {selectedRecord?.status}
                             </DialogDescription>
                           </DialogHeader>
                           <div className="space-y-4 py-4">
                             <div className="grid grid-cols-2 gap-4 text-sm">
                               {[
-                                ['Period Type', selectedRecord.periodType],
-                                ['Generated', new Date(selectedRecord.generatedDate).toLocaleDateString()],
+                                ['Period Type', selectedRecord?.period_type],
+                                ['Generated', selectedRecord?.generated_date ? new Date(selectedRecord.generated_date).toLocaleDateString() : '—'],
                               ].map(([k, v]) => (
-                                <div key={k}><p className="text-gray-500">{k}</p><p className="font-medium">{v}</p></div>
+                                <div key={k as string}><p className="text-gray-500">{k as string}</p><p className="font-medium">{v as string}</p></div>
                               ))}
                             </div>
 
@@ -227,19 +327,19 @@ export function Payroll() {
                               <h4 className="font-medium mb-3">Earnings</h4>
                               <div className="space-y-2 text-sm">
                                 {[
-                                  ['Basic Pay', selectedRecord.basicPay],
-                                  ['Overtime Pay', selectedRecord.overtimePay],
-                                  ['Holiday Pay', selectedRecord.holidayPay],
-                                  ['Bonuses', selectedRecord.bonuses],
+                                  ['Basic Pay', selectedRecord?.basic_pay],
+                                  ['Overtime Pay', selectedRecord?.overtime_pay],
+                                  ['Holiday Pay', selectedRecord?.holiday_pay],
+                                  ['Bonuses', selectedRecord?.bonuses],
                                 ].map(([label, amount]) => (
                                   <div key={label as string} className="flex justify-between">
                                     <span className="text-gray-600">{label as string}</span>
-                                    <span className="font-medium">₱{(amount as number).toLocaleString('en-PH',{minimumFractionDigits:2})}</span>
+                                    <span className="font-medium">₱{(amount as number || 0).toLocaleString('en-PH',{minimumFractionDigits:2})}</span>
                                   </div>
                                 ))}
                                 <div className="flex justify-between border-t pt-2 font-semibold">
                                   <span>Gross Pay</span>
-                                  <span>₱{selectedRecord.grossPay.toLocaleString('en-PH',{minimumFractionDigits:2})}</span>
+                                  <span>₱{(selectedRecord?.gross_pay || 0).toLocaleString('en-PH',{minimumFractionDigits:2})}</span>
                                 </div>
                               </div>
                             </div>
@@ -248,7 +348,7 @@ export function Payroll() {
                             <div className="border-t pt-4">
                               <h4 className="font-medium mb-3">Deductions</h4>
                               <div className="space-y-2 text-sm">
-                                {selectedRecord.deductions.map(d => (
+                                {selectedRecord?.deductions.map(d => (
                                   <div key={d.id} className="flex justify-between">
                                     <span className="text-gray-600">{d.name}</span>
                                     <span className="font-medium text-red-600">-₱{d.amount.toLocaleString('en-PH',{minimumFractionDigits:2})}</span>
@@ -256,18 +356,18 @@ export function Payroll() {
                                 ))}
                                 <div className="flex justify-between border-t pt-2 font-semibold">
                                   <span>Total Deductions</span>
-                                  <span className="text-red-600">-₱{selectedRecord.totalDeductions.toLocaleString('en-PH',{minimumFractionDigits:2})}</span>
+                                  <span className="text-red-600">-₱{(selectedRecord?.total_deductions || 0).toLocaleString('en-PH',{minimumFractionDigits:2})}</span>
                                 </div>
                               </div>
                             </div>
 
                             {/* Net Pay */}
-                            <div className="border-t pt-4">
-                              <div className="flex justify-between text-lg font-bold">
-                                <span>Net Pay</span>
-                                <span className="text-green-600">₱{selectedRecord.netPay.toLocaleString('en-PH',{minimumFractionDigits:2})}</span>
-                              </div>
-                            </div>
+                             <div className="border-t pt-4">
+                               <div className="flex justify-between text-lg font-bold">
+                                 <span>Net Pay</span>
+                                 <span className="text-green-600">₱{(selectedRecord?.net_pay || 0).toLocaleString('en-PH',{minimumFractionDigits:2})}</span>
+                               </div>
+                             </div>
                           </div>
                         </DialogContent>
                       </Dialog>
