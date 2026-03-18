@@ -1,0 +1,481 @@
+import { useState } from 'react';
+import { Search, Edit, Eye, Plus, Trash2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Badge } from '../components/ui/badge';
+import { Card, CardContent, CardHeader } from '../components/ui/card';
+import { mockEmployees } from '../data/mockData';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+  DialogTrigger, DialogDescription, DialogFooter,
+} from '../components/ui/dialog';
+import { Label } from '../components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import type { Employee, EmploymentStatus } from '../types/payroll';
+import { generateEmployeeId, calcHourlyRate } from '../utils/exportUtils';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type ToastType = 'success' | 'error';
+interface Toast { message: string; type: ToastType }
+
+const EMPTY_FORM = {
+  name: '', position: '', department: '', status: '' as EmploymentStatus | '',
+  basicPay: '', email: '', hireDate: '', taxId: '', sssNumber: '',
+  philHealthNumber: '', pagIbigNumber: '', bankAccount: '',
+};
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export function Employees() {
+  const [employees, setEmployees] = useState<Employee[]>(mockEmployees);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee>(mockEmployees[0]);
+  const [addOpen, setAddOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [editForm, setEditForm] = useState({ ...EMPTY_FORM });
+  const [toast, setToast] = useState<Toast | null>(null);
+  const [errors, setErrors] = useState<Partial<typeof EMPTY_FORM>>({});
+
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+
+  const showToast = (message: string, type: ToastType = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const filteredEmployees = employees.filter(emp =>
+    emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    emp.employeeId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    emp.department.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'regular': return 'bg-green-100 text-green-800';
+      case 'contractual': return 'bg-blue-100 text-blue-800';
+      case 'probationary': return 'bg-yellow-100 text-yellow-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // ── Validation ───────────────────────────────────────────────────────────────
+
+  const validate = (f: typeof EMPTY_FORM) => {
+    const errs: Partial<typeof EMPTY_FORM> = {};
+    if (!f.name.trim()) errs.name = 'Required';
+    if (!f.position.trim()) errs.position = 'Required';
+    if (!f.department) errs.department = 'Required';
+    if (!f.status) errs.status = 'Required';
+    if (!f.basicPay || isNaN(Number(f.basicPay)) || Number(f.basicPay) <= 0)
+      errs.basicPay = 'Must be positive';
+    if (!f.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) errs.email = 'Invalid email';
+    if (!f.hireDate) errs.hireDate = 'Required';
+    return errs;
+  };
+
+  // ── Add Employee ─────────────────────────────────────────────────────────────
+
+  const handleAdd = () => {
+    const errs = validate(form);
+    if (Object.keys(errs).length) { setErrors(errs); return; }
+    setErrors({});
+    const basicPay = Number(form.basicPay);
+    const newEmp: Employee = {
+      id: String(Date.now()),
+      employeeId: generateEmployeeId(employees),
+      name: form.name.trim(),
+      position: form.position.trim(),
+      department: form.department,
+      status: form.status as EmploymentStatus,
+      basicPay,
+      hourlyRate: calcHourlyRate(basicPay),
+      email: form.email.trim(),
+      hireDate: form.hireDate,
+      taxId: form.taxId.trim() || 'TIN-000-000-000',
+      sssNumber: form.sssNumber.trim() || 'SSS-00-0000000-0',
+      philHealthNumber: form.philHealthNumber.trim() || 'PH-00-000000000-0',
+      pagIbigNumber: form.pagIbigNumber.trim() || 'HDMF-0000-0000-0000',
+      bankAccount: form.bankAccount.trim() || 'BDO-0000000000',
+    };
+    setEmployees(prev => [...prev, newEmp]);
+    setForm({ ...EMPTY_FORM });
+    setAddOpen(false);
+    showToast(`${newEmp.name} (${newEmp.employeeId}) added successfully.`);
+  };
+
+  // ── Edit Employee ────────────────────────────────────────────────────────────
+
+  const openEdit = (emp: Employee) => {
+    setSelectedEmployee(emp);
+    setEditForm({
+      name: emp.name, position: emp.position, department: emp.department,
+      status: emp.status, basicPay: String(emp.basicPay), email: emp.email,
+      hireDate: emp.hireDate, taxId: emp.taxId, sssNumber: emp.sssNumber,
+      philHealthNumber: emp.philHealthNumber, pagIbigNumber: emp.pagIbigNumber,
+      bankAccount: emp.bankAccount,
+    });
+    setEditOpen(true);
+  };
+
+  const handleEdit = () => {
+    const errs = validate(editForm);
+    if (Object.keys(errs).length) { setErrors(errs); return; }
+    setErrors({});
+    const basicPay = Number(editForm.basicPay);
+    setEmployees(prev => prev.map(e =>
+      e.id !== selectedEmployee.id ? e : {
+        ...e,
+        name: editForm.name.trim(),
+        position: editForm.position.trim(),
+        department: editForm.department,
+        status: editForm.status as EmploymentStatus,
+        basicPay,
+        hourlyRate: calcHourlyRate(basicPay),
+        email: editForm.email.trim(),
+        hireDate: editForm.hireDate,
+        taxId: editForm.taxId.trim(),
+        sssNumber: editForm.sssNumber.trim(),
+        philHealthNumber: editForm.philHealthNumber.trim(),
+        pagIbigNumber: editForm.pagIbigNumber.trim(),
+        bankAccount: editForm.bankAccount.trim(),
+      }
+    ));
+    setEditOpen(false);
+    showToast(`${editForm.name} updated successfully.`);
+  };
+
+  // ── Delete Employee ──────────────────────────────────────────────────────────
+
+  const handleDelete = () => {
+    if (!deleteId) return;
+    const emp = employees.find(e => e.id === deleteId);
+    setEmployees(prev => prev.filter(e => e.id !== deleteId));
+    setDeleteId(null);
+    showToast(`${emp?.name} removed from the system.`, 'error');
+  };
+
+  // ── Field helper ─────────────────────────────────────────────────────────────
+
+  const fieldClass = (err?: string) =>
+    `${err ? 'border-red-500 focus-visible:ring-red-500' : ''}`;
+
+  // ── Render ───────────────────────────────────────────────────────────────────
+
+  return (
+    <div className="space-y-6 relative">
+
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg text-sm font-medium transition-all
+          ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
+          {toast.type === 'success'
+            ? <CheckCircle className="w-4 h-4 flex-shrink-0" />
+            : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
+          {toast.message}
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold">Employee Management</h2>
+          <p className="text-gray-600 mt-1">Manage employee information and records</p>
+        </div>
+
+        {/* Add Employee Dialog */}
+        <Dialog open={addOpen} onOpenChange={setAddOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={() => { setForm({ ...EMPTY_FORM }); setErrors({}); }}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Employee
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Add New Employee</DialogTitle>
+              <DialogDescription>Fill in the required fields to register a new employee.</DialogDescription>
+            </DialogHeader>
+            <EmployeeForm
+              f={form} setF={setForm} errors={errors}
+              employees={employees} fieldClass={fieldClass}
+            />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
+              <Button onClick={handleAdd}>Save Employee</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Employee Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-4">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Input
+                placeholder="Search by name, ID or department…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <span className="text-sm text-gray-500">{filteredEmployees.length} employees</span>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  {['Employee ID','Name','Position','Department','Status','Basic Pay','Actions'].map(h => (
+                    <th key={h} className={`py-3 px-4 text-sm font-medium text-gray-600 ${h === 'Actions' ? 'text-center' : h === 'Basic Pay' ? 'text-right' : 'text-left'}`}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredEmployees.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="text-center py-10 text-gray-400">No employees found.</td>
+                  </tr>
+                )}
+                {filteredEmployees.map(employee => (
+                  <tr key={employee.id} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-3 px-4 text-sm font-medium">{employee.employeeId}</td>
+                    <td className="py-3 px-4 text-sm">{employee.name}</td>
+                    <td className="py-3 px-4 text-sm text-gray-600">{employee.position}</td>
+                    <td className="py-3 px-4 text-sm text-gray-600">{employee.department}</td>
+                    <td className="py-3 px-4">
+                      <Badge className={getStatusColor(employee.status)}>{employee.status}</Badge>
+                    </td>
+                    <td className="py-3 px-4 text-sm text-right">₱{employee.basicPay.toLocaleString()}</td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center justify-center gap-1">
+                        {/* View */}
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="ghost" size="sm" onClick={() => setSelectedEmployee(employee)}>
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-2xl">
+                            <DialogHeader>
+                              <DialogTitle>Employee Details</DialogTitle>
+                              <DialogDescription>Read-only view of employee record.</DialogDescription>
+                            </DialogHeader>
+                            <div className="grid grid-cols-2 gap-4 py-4">
+                              {[
+                                ['Employee ID', selectedEmployee.employeeId],
+                                ['Full Name', selectedEmployee.name],
+                                ['Position', selectedEmployee.position],
+                                ['Department', selectedEmployee.department],
+                                ['Hire Date', new Date(selectedEmployee.hireDate).toLocaleDateString()],
+                                ['Basic Pay', `₱${selectedEmployee.basicPay.toLocaleString()}`],
+                                ['Hourly Rate', `₱${selectedEmployee.hourlyRate.toLocaleString()}`],
+                                ['Email', selectedEmployee.email],
+                                ['Bank Account', selectedEmployee.bankAccount],
+                                ['TIN', selectedEmployee.taxId],
+                                ['SSS', selectedEmployee.sssNumber],
+                                ['PhilHealth', selectedEmployee.philHealthNumber],
+                                ['Pag-IBIG', selectedEmployee.pagIbigNumber],
+                              ].map(([label, val]) => (
+                                <div key={label}>
+                                  <p className="text-sm text-gray-500">{label}</p>
+                                  <p className="font-medium text-sm">{val}</p>
+                                </div>
+                              ))}
+                              <div>
+                                <p className="text-sm text-gray-500">Status</p>
+                                <Badge className={getStatusColor(selectedEmployee.status)}>
+                                  {selectedEmployee.status}
+                                </Badge>
+                              </div>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+
+                        {/* Edit */}
+                        <Button variant="ghost" size="sm" onClick={() => openEdit(employee)}>
+                          <Edit className="w-4 h-4" />
+                        </Button>
+
+                        {/* Delete */}
+                        <Button
+                          variant="ghost" size="sm"
+                          className="text-red-500 hover:text-red-700"
+                          onClick={() => setDeleteId(employee.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Edit Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Employee</DialogTitle>
+            <DialogDescription>Update {selectedEmployee.name}'s information.</DialogDescription>
+          </DialogHeader>
+          <EmployeeForm
+            f={editForm} setF={setEditForm} errors={errors}
+            employees={employees} fieldClass={fieldClass}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button onClick={handleEdit}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirm Dialog */}
+      <Dialog open={!!deleteId} onOpenChange={open => !open && setDeleteId(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Employee</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove this employee? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ─── Reusable Employee Form ───────────────────────────────────────────────────
+
+interface EmployeeFormProps {
+  f: typeof EMPTY_FORM;
+  setF: React.Dispatch<React.SetStateAction<typeof EMPTY_FORM>>;
+  errors: Partial<typeof EMPTY_FORM>;
+  employees: Employee[];
+  fieldClass: (err?: string) => string;
+}
+
+function EmployeeForm({ f, setF, errors, fieldClass }: EmployeeFormProps) {
+  const set = (key: keyof typeof EMPTY_FORM) =>
+    (val: string) => setF(prev => ({ ...prev, [key]: val }));
+  const onChange = (key: keyof typeof EMPTY_FORM) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => setF(prev => ({ ...prev, [key]: e.target.value }));
+
+  return (
+    <div className="grid grid-cols-2 gap-4 py-4">
+      {/* Full Name */}
+      <div className="space-y-1">
+        <Label htmlFor="name">Full Name <span className="text-red-500">*</span></Label>
+        <Input id="name" value={f.name} onChange={onChange('name')} className={fieldClass(errors.name)} placeholder="e.g. Maria Santos" />
+        {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
+      </div>
+
+      {/* Position */}
+      <div className="space-y-1">
+        <Label htmlFor="position">Position <span className="text-red-500">*</span></Label>
+        <Input id="position" value={f.position} onChange={onChange('position')} className={fieldClass(errors.position)} placeholder="e.g. Software Engineer" />
+        {errors.position && <p className="text-xs text-red-500">{errors.position}</p>}
+      </div>
+
+      {/* Department */}
+      <div className="space-y-1">
+        <Label>Department <span className="text-red-500">*</span></Label>
+        <Select value={f.department} onValueChange={set('department')}>
+          <SelectTrigger className={fieldClass(errors.department)}>
+            <SelectValue placeholder="Select department" />
+          </SelectTrigger>
+          <SelectContent>
+            {['Engineering','Marketing','Human Resources','Finance','Sales','Operations'].map(d => (
+              <SelectItem key={d} value={d}>{d}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {errors.department && <p className="text-xs text-red-500">{errors.department}</p>}
+      </div>
+
+      {/* Status */}
+      <div className="space-y-1">
+        <Label>Employment Status <span className="text-red-500">*</span></Label>
+        <Select value={f.status} onValueChange={set('status')}>
+          <SelectTrigger className={fieldClass(errors.status)}>
+            <SelectValue placeholder="Select status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="regular">Regular</SelectItem>
+            <SelectItem value="contractual">Contractual</SelectItem>
+            <SelectItem value="probationary">Probationary</SelectItem>
+          </SelectContent>
+        </Select>
+        {errors.status && <p className="text-xs text-red-500">{errors.status}</p>}
+      </div>
+
+      {/* Basic Pay */}
+      <div className="space-y-1">
+        <Label htmlFor="basicPay">Basic Pay (₱) <span className="text-red-500">*</span></Label>
+        <Input id="basicPay" type="number" value={f.basicPay} onChange={onChange('basicPay')} className={fieldClass(errors.basicPay)} placeholder="50000" min={1} />
+        {errors.basicPay && <p className="text-xs text-red-500">{errors.basicPay}</p>}
+        {f.basicPay && !isNaN(Number(f.basicPay)) && (
+          <p className="text-xs text-gray-400">Hourly rate: ₱{calcHourlyRate(Number(f.basicPay)).toFixed(2)}</p>
+        )}
+      </div>
+
+      {/* Email */}
+      <div className="space-y-1">
+        <Label htmlFor="email">Email <span className="text-red-500">*</span></Label>
+        <Input id="email" type="email" value={f.email} onChange={onChange('email')} className={fieldClass(errors.email)} placeholder="name@company.com" />
+        {errors.email && <p className="text-xs text-red-500">{errors.email}</p>}
+      </div>
+
+      {/* Hire Date */}
+      <div className="space-y-1">
+        <Label htmlFor="hireDate">Hire Date <span className="text-red-500">*</span></Label>
+        <Input id="hireDate" type="date" value={f.hireDate} onChange={onChange('hireDate')} className={fieldClass(errors.hireDate)} />
+        {errors.hireDate && <p className="text-xs text-red-500">{errors.hireDate}</p>}
+      </div>
+
+      {/* TIN */}
+      <div className="space-y-1">
+        <Label htmlFor="taxId">Tax ID (TIN)</Label>
+        <Input id="taxId" value={f.taxId} onChange={onChange('taxId')} placeholder="123-456-789" />
+      </div>
+
+      {/* SSS */}
+      <div className="space-y-1">
+        <Label htmlFor="sss">SSS Number</Label>
+        <Input id="sss" value={f.sssNumber} onChange={onChange('sssNumber')} placeholder="34-1234567-8" />
+      </div>
+
+      {/* PhilHealth */}
+      <div className="space-y-1">
+        <Label htmlFor="philhealth">PhilHealth Number</Label>
+        <Input id="philhealth" value={f.philHealthNumber} onChange={onChange('philHealthNumber')} placeholder="12-345678901-2" />
+      </div>
+
+      {/* Pag-IBIG */}
+      <div className="space-y-1">
+        <Label htmlFor="pagibig">Pag-IBIG Number</Label>
+        <Input id="pagibig" value={f.pagIbigNumber} onChange={onChange('pagIbigNumber')} placeholder="1234-5678-9012" />
+      </div>
+
+      {/* Bank Account */}
+      <div className="space-y-1">
+        <Label htmlFor="bank">Bank Account</Label>
+        <Input id="bank" value={f.bankAccount} onChange={onChange('bankAccount')} placeholder="BDO-1234567890" />
+      </div>
+    </div>
+  );
+}
