@@ -1,0 +1,5 @@
+- update readme.md
+- remove supabase-errors.md
+- generate test data for all functions in the database.
+- generate larger datasets.
+- possibly add backend server to separate functions.
