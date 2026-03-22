@@ -39,7 +39,7 @@ const DEFAULT_SCHEDULE: ScheduledReportConfig = existing ?? {
 };
 
 export function Reports() {
-  const [selectedPeriod, setSelectedPeriod] = useState('march-2026');
+  const [selectedPeriod, setSelectedPeriod] = useState('March 2026');
   const [records, setRecords] = useState<PayrollRecord[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [summaryData, setSummaryData] = useState<any[]>([]);
@@ -107,22 +107,25 @@ export function Reports() {
       name: s.employee_name,
       position: s.position,
       department: s.department,
-      grossPay: s.total_gross_pay,
-      tax: s.total_tax,
-      sss: s.total_sss,
-      philHealth: s.total_philhealth,
-      pagIbig: s.total_pagibig,
-      totalDeductions: s.total_deductions_sum,
-      netPay: s.total_net_pay,
-      payrollCount: s.payroll_count
+      grossPay: s.total_gross_pay || 0,
+      tax: s.total_tax || 0,
+      sss: s.total_sss || 0,
+      philHealth: s.total_philhealth || 0,
+      pagIbig: s.total_pagibig || 0,
+      totalDeductions: s.total_deductions_sum || 0,
+      netPay: s.total_net_pay || 0,
+      payrollCount: s.payroll_count || 0
     }));
   }, [summaryData]);
 
-  const totalPayroll    = records.reduce((s, p) => s + Number(p.net_pay), 0);
-  const totalDeductions = records.reduce((s, p) => s + Number(p.total_deductions), 0);
+  const totalPayroll    = records.reduce((s, p) => s + Number(p.net_pay || 0), 0);
+  const totalDeductions = records.reduce((s, p) => s + Number(p.total_deductions || 0), 0);
   const avgSalary       = records.length ? totalPayroll / records.length : 0;
 
-  const fmt = (n: number) => `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+  const fmt = (n: number | undefined | null) => {
+    const val = Number(n || 0);
+    return `₱${val.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+  };
 
   // ── Feature 6: Export All Reports ──────────────────────────────────────────
 
@@ -190,9 +193,9 @@ export function Reports() {
           <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
             <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="march-2026">March 2026</SelectItem>
-              <SelectItem value="february-2026">February 2026</SelectItem>
-              <SelectItem value="january-2026">January 2026</SelectItem>
+              <SelectItem value="March 2026">March 2026</SelectItem>
+              <SelectItem value="February 2026">February 2026</SelectItem>
+              <SelectItem value="January 2026">January 2026</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" onClick={() => setScheduleOpen(true)}>

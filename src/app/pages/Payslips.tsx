@@ -5,7 +5,7 @@ import { Button } from '../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import type { PayrollRecord, Employee } from '../types/payroll';
 import { Badge } from '../components/ui/badge';
-import { printPayslip } from '../utils/exportUtils';
+import { printPayslip, downloadPayslip } from '../utils/exportUtils';
 import { supabase } from '../../lib/supabase';
 import { useEffect } from 'react';
 
@@ -60,9 +60,10 @@ export function Payslips() {
   // ── Feature 5: Download Payslip as PDF (via browser print) ──────────────
 
   const handleDownload = () => {
-    if (!previewRecord) return;
-    printPayslip('payslip-preview');
-    showToast('Payslip sent to print / save as PDF.');
+    if (!previewRecord || !employee) return;
+    showToast('PDF download started directly.');
+    const filename = `Payslip_${employee.employee_id}_${previewRecord.period_label.replace(/\s+/g, '_')}.pdf`;
+    downloadPayslip('payslip-preview', filename);
   };
 
   const handlePrint = () => {
@@ -289,8 +290,12 @@ export function Payslips() {
                             variant="ghost" size="sm"
                             onClick={() => {
                               setSelectedEmployee(record.employee_id);
-                              setTimeout(() => printPayslip('payslip-preview'), 200);
-                              showToast('Payslip sent to printer.');
+                              showToast('PDF download started.');
+                              setTimeout(() => {
+                                const emp = employees.find(e => e.id === record.employee_id);
+                                const filename = `Payslip_${emp?.employee_id || 'N-A'}_${record.period_label.replace(/\s+/g, '_')}.pdf`;
+                                downloadPayslip('payslip-preview', filename);
+                              }, 500);
                             }}
                           >
                             <Download className="w-4 h-4 mr-1" /> Download

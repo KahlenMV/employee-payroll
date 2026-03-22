@@ -1,4 +1,7 @@
 import type { Employee, Attendance, PayrollRecord, LeaveRequest } from '../types/payroll';
+// @ts-ignore
+import html2pdf from 'html2pdf.js';
+
 
 // ─── Generic CSV Helper ───────────────────────────────────────────────────────
 
@@ -205,6 +208,26 @@ export function printPayslip(elementId: string): void {
   w.focus();
   w.print();
   w.close();
+}
+
+/** Direct PDF generation via html2pdf.js */
+export function downloadPayslip(elementId: string, filename: string): void {
+  const element = document.getElementById(elementId);
+  if (!element) return;
+
+  const opt = {
+    margin: 10,
+    filename: filename,
+    image: { type: 'jpeg' as const, quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true, logging: false },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
+  };
+
+  try {
+    html2pdf().set(opt).from(element).save();
+  } catch (err) {
+    console.error('Error during PDF generation:', err);
+  }
 }
 
 // ─── Feature 6 – Export Reports (all employees summary) ──────────────────────

@@ -13,15 +13,15 @@ import { useEffect } from 'react';
 // ── Period options metadata ────────────────────────────────────────────────────
 
 const PERIODS = [
-  { value: 'feb-16-28-2026', label: 'February 16–28, 2026', start: '2026-02-16', end: '2026-02-28' },
-  { value: 'feb-1-15-2026',  label: 'February 1–15, 2026',  start: '2026-02-01', end: '2026-02-15' },
-  { value: 'jan-16-31-2026', label: 'January 16–31, 2026',  start: '2026-01-16', end: '2026-01-31' },
+  { value: 'mar-2026', label: 'March 2026',    start: '2026-03-01', end: '2026-03-31' },
+  { value: 'feb-2026', label: 'February 2026', start: '2026-02-01', end: '2026-02-28' },
+  { value: 'jan-2026', label: 'January 2026',  start: '2026-01-01', end: '2026-01-31' },
 ] as const;
 
 type PeriodValue = typeof PERIODS[number]['value'];
 
 export function Payroll() {
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodValue>('feb-16-28-2026');
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodValue>('mar-2026');
   const [records, setRecords] = useState<PayrollRecord[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendance, setAttendance] = useState<Attendance[]>([]);
@@ -54,7 +54,7 @@ export function Payroll() {
           period_label: meta.label,
           period_start: meta.start,
           period_end: meta.end,
-          period_type: 'semi-monthly'
+          period_type: 'monthly'
         })
         .select()
         .single();
@@ -122,7 +122,7 @@ export function Payroll() {
         employees: employees,
         attendance: attendance,
         period: currentPeriodMeta.label,
-        periodType: 'semi-monthly',
+        periodType: 'monthly',
         periodStart: currentPeriodMeta.start,
         periodEnd: currentPeriodMeta.end,
       }, records);

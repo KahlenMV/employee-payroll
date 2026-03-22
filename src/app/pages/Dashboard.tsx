@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { supabase } from '../../lib/supabase';
 import { useEffect, useState } from 'react';
 import type { PayrollRecord, Employee } from '../types/payroll';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 
 export function Dashboard() {
   const [statsData, setStatsData] = useState({
@@ -23,19 +23,24 @@ export function Dashboard() {
   const fetchDashboardData = async () => {
     setLoading(true);
     const today = new Date().toISOString().split('T')[0];
-    
-    const [empRes, payrollRes, leaveRes, attRes] = await Promise.all([
-      supabase.from('employees').select('id, status'),
+
+    const [empRes, payrollRes, leaveRes, attRes, periodsRes] = await Promise.all([
+      supabase.from('employees').select('id, name, status'),
       supabase.from('payroll_records').select('*').order('generated_date', { ascending: false }).limit(5),
       supabase.from('leave_requests').select('id').eq('status', 'pending'),
-      supabase.from('attendance').select('id').eq('date', today).in('status', ['present', 'late'])
+      supabase.from('attendance').select('id').eq('date', today).in('status', ['present', 'late']),
+      supabase.from('payroll_periods').select('id, period_label')
     ]);
 
     const employees = empRes.data || [];
-    const payroll = payrollRes.data || [];
-    
+    const periods = periodsRes.data || [];
+    const payroll = (payrollRes.data || []).map(p => ({
+      ...p,
+      employee_name: employees.find(e => e.id === p.employee_id)?.name,
+      period_label: periods.find(per => per.id === p.period_id)?.period_label
+    }));
+
     // Total payroll (net pay) from last 30 days or similar - for now just sum what we have or mock it
-    // Actually let's just sum the recent ones or fetch a larger set for total
     const { data: monthlyPayroll } = await supabase.from('payroll_records').select('net_pay');
     const totalNet = (monthlyPayroll || []).reduce((sum, p) => sum + (p.net_pay || 0), 0);
 
@@ -141,20 +146,19 @@ export function Dashboard() {
                     <td className="py-3 px-4 text-sm text-right text-red-600">-₱{(record.total_deductions || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
                     <td className="py-3 px-4 text-sm text-right font-medium">₱{(record.net_pay || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}</td>
                     <td className="py-3 px-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        record.status === 'paid' 
-                          ? 'bg-green-100 text-green-800'
-                          : record.status === 'processed'
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${record.status === 'paid'
+                        ? 'bg-green-100 text-green-800'
+                        : record.status === 'processed'
                           ? 'bg-blue-100 text-blue-800'
                           : 'bg-yellow-100 text-yellow-800'
-                      }`}>
+                        }`}>
                         {record.status}
                       </span>
                     </td>
                   </tr>
                 ))}
                 {recentPayroll.length === 0 && !loading && (
-                   <tr><td colSpan={6} className="text-center py-6 text-gray-400">No recent payroll activity.</td></tr>
+                  <tr><td colSpan={6} className="text-center py-6 text-gray-400">No recent payroll activity.</td></tr>
                 )}
               </tbody>
             </table>

@@ -33,6 +33,7 @@ CREATE POLICY "Public Access" ON deductions FOR ALL USING (true) WITH CHECK (tru
 
 -- 3. Fix View Security (Security Invoker)
 -- Redefining the view to use security_invoker = true to respect RLS of the querying user.
+-- Using DROP VIEW first to ensure column name changes are applied correctly.
 DROP VIEW IF EXISTS employee_earnings_summary;
 
 CREATE VIEW employee_earnings_summary 
@@ -40,17 +41,28 @@ WITH (security_invoker = true) AS
 SELECT 
   e.id as primary_id,
   e.employee_id,
-  e.name,
+  e.name as employee_name,
   e.department,
   e.position,
-  COALESCE(SUM(pr.basic_pay), 0) as total_basic,
-  COALESCE(SUM(pr.overtime_pay), 0) as total_overtime,
-  COALESCE(SUM(pr.holiday_pay), 0) as total_holiday,
-  COALESCE(SUM(pr.bonuses), 0) as total_bonuses,
-  COALESCE(SUM(pr.gross_pay), 0) as total_gross,
-  COALESCE(SUM(pr.total_deductions), 0) as total_deductions,
-  COALESCE(SUM(pr.net_pay), 0) as total_net,
+  COALESCE(SUM(pr.gross_pay), 0) as total_gross_pay,
+  COALESCE(SUM(pr.net_pay), 0) as total_net_pay,
+  COALESCE((SELECT SUM(d.amount) FROM deductions d JOIN payroll_records pr2 ON d.payroll_record_id = pr2.id WHERE pr2.employee_id = e.id AND d.type = 'tax'), 0) as total_tax,
+  COALESCE((SELECT SUM(d.amount) FROM deductions d JOIN payroll_records pr2 ON d.payroll_record_id = pr2.id WHERE pr2.employee_id = e.id AND d.type = 'sss'), 0) as total_sss,
+  COALESCE((SELECT SUM(d.amount) FROM deductions d JOIN payroll_records pr2 ON d.payroll_record_id = pr2.id WHERE pr2.employee_id = e.id AND d.type = 'philhealth'), 0) as total_philhealth,
+  COALESCE((SELECT SUM(d.amount) FROM deductions d JOIN payroll_records pr2 ON d.payroll_record_id = pr2.id WHERE pr2.employee_id = e.id AND d.type = 'pagibig'), 0) as total_pagibig,
+  COALESCE(SUM(pr.total_deductions), 0) as total_deductions_sum,
   COUNT(pr.id) as payroll_count
 FROM employees e
 LEFT JOIN payroll_records pr ON e.id = pr.employee_id
 GROUP BY e.id, e.employee_id, e.name, e.department, e.position;
+
+-- 4. Transition to Monthly Payroll Periods
+-- Update existing periods and insert new monthly ones
+UPDATE payroll_periods SET period_type = 'monthly', status = 'open' WHERE period_type = 'semi-monthly';
+
+INSERT INTO payroll_periods (period_label, period_start, period_end, period_type)
+VALUES 
+  ('March 2026', '2026-03-01', '2026-03-31', 'monthly'),
+  ('February 2026', '2026-02-01', '2026-02-28', 'monthly'),
+  ('January 2026', '2026-01-01', '2026-01-31', 'monthly')
+ON CONFLICT (period_label) DO NOTHING;

@@ -95,16 +95,16 @@ WITH (security_invoker = true) AS
 SELECT 
   e.id as primary_id,
   e.employee_id,
-  e.name,
+  e.name as employee_name,
   e.department,
   e.position,
-  COALESCE(SUM(pr.basic_pay), 0) as total_basic,
-  COALESCE(SUM(pr.overtime_pay), 0) as total_overtime,
-  COALESCE(SUM(pr.holiday_pay), 0) as total_holiday,
-  COALESCE(SUM(pr.bonuses), 0) as total_bonuses,
-  COALESCE(SUM(pr.gross_pay), 0) as total_gross,
-  COALESCE(SUM(pr.total_deductions), 0) as total_deductions,
-  COALESCE(SUM(pr.net_pay), 0) as total_net,
+  COALESCE(SUM(pr.gross_pay), 0) as total_gross_pay,
+  COALESCE(SUM(pr.net_pay), 0) as total_net_pay,
+  COALESCE((SELECT SUM(d.amount) FROM deductions d JOIN payroll_records pr2 ON d.payroll_record_id = pr2.id WHERE pr2.employee_id = e.id AND d.type = 'tax'), 0) as total_tax,
+  COALESCE((SELECT SUM(d.amount) FROM deductions d JOIN payroll_records pr2 ON d.payroll_record_id = pr2.id WHERE pr2.employee_id = e.id AND d.type = 'sss'), 0) as total_sss,
+  COALESCE((SELECT SUM(d.amount) FROM deductions d JOIN payroll_records pr2 ON d.payroll_record_id = pr2.id WHERE pr2.employee_id = e.id AND d.type = 'philhealth'), 0) as total_philhealth,
+  COALESCE((SELECT SUM(d.amount) FROM deductions d JOIN payroll_records pr2 ON d.payroll_record_id = pr2.id WHERE pr2.employee_id = e.id AND d.type = 'pagibig'), 0) as total_pagibig,
+  COALESCE(SUM(pr.total_deductions), 0) as total_deductions_sum,
   COUNT(pr.id) as payroll_count
 FROM employees e
 LEFT JOIN payroll_records pr ON e.id = pr.employee_id
@@ -126,10 +126,10 @@ CREATE POLICY "Public Access" ON payroll_periods FOR ALL USING (true) WITH CHECK
 CREATE POLICY "Public Access" ON payroll_records FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public Access" ON deductions FOR ALL USING (true) WITH CHECK (true);
 
--- 10. Seed Data for Payroll Periods
+-- 10. Seed Data for Payroll Periods (Monthly Transitions)
 INSERT INTO payroll_periods (period_label, period_start, period_end, period_type)
 VALUES 
-  ('February 16-28, 2026', '2026-02-16', '2026-02-28', 'semi-monthly'),
-  ('February 1-15, 2026', '2026-02-01', '2026-02-15', 'semi-monthly'),
-  ('January 16-31, 2026', '2026-01-16', '2026-01-31', 'semi-monthly')
+  ('March 2026', '2026-03-01', '2026-03-31', 'monthly'),
+  ('February 2026', '2026-02-01', '2026-02-28', 'monthly'),
+  ('January 2026', '2026-01-01', '2026-01-31', 'monthly')
 ON CONFLICT (period_label) DO NOTHING;
